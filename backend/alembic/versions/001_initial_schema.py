@@ -22,7 +22,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Enable required PostgreSQL extensions
-    op.execute("CREATE EXTENSION IF NOT EXISTS pgvector")
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
 
     # ── users ──────────────────────────────────────────────────────────────────
@@ -87,21 +87,24 @@ def upgrade() -> None:
         "documents",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
         sa.Column("matter_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("matters.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("uploader_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("original_filename", sa.String(500), nullable=False),
-        sa.Column("storage_key", sa.String(1000), nullable=False),
+        sa.Column("uploaded_by", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("file_name", sa.String(500), nullable=False),
+        sa.Column("object_key", sa.String(1000), nullable=False),
+        sa.Column("sha256", sa.String(64), nullable=False),
         sa.Column("mime_type", sa.String(200), nullable=False),
-        sa.Column("file_size_bytes", sa.BigInteger, nullable=True),
+        sa.Column("size_bytes", sa.BigInteger, nullable=True),
         sa.Column("document_type", sa.String(50), nullable=False, server_default="other"),
         sa.Column("status", sa.String(50), nullable=False, server_default="pending"),
         sa.Column("page_count", sa.Integer, nullable=True),
-        sa.Column("error_message", sa.Text, nullable=True),
+        sa.Column("error_reason", sa.Text, nullable=True),
         sa.Column("processing_metadata", postgresql.JSONB, nullable=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("version", sa.Integer, nullable=False, server_default="1"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_index("ix_documents_matter_id", "documents", ["matter_id"])
-    op.create_index("ix_documents_storage_key", "documents", ["storage_key"], unique=True)
+    op.create_index("ix_documents_object_key", "documents", ["object_key"], unique=True)
 
     # ── document_chunks ───────────────────────────────────────────────────────
     op.create_table(
@@ -109,10 +112,12 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
         sa.Column("document_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("documents.id", ondelete="CASCADE"), nullable=False),
         sa.Column("matter_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("matters.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("chunk_index", sa.Integer, nullable=False),
+        sa.Column("seq", sa.Integer, nullable=False),
         sa.Column("text", sa.Text, nullable=False),
         sa.Column("embedding", pgvector.sqlalchemy.Vector(1536), nullable=True),
-        sa.Column("page_number", sa.Integer, nullable=True),
+        sa.Column("embedding_model", sa.String(50), nullable=True),
+        sa.Column("page_from", sa.Integer, nullable=True),
+        sa.Column("page_to", sa.Integer, nullable=True),
         sa.Column("token_count", sa.Integer, nullable=True),
         sa.Column("chunk_metadata", postgresql.JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
@@ -433,5 +438,5 @@ def downgrade() -> None:
     op.drop_table("matters")
     op.drop_table("refresh_tokens")
     op.drop_table("users")
-    op.execute("DROP EXTENSION IF EXISTS pgvector")
+    op.execute("DROP EXTENSION IF EXISTS vector")
     op.execute('DROP EXTENSION IF EXISTS "uuid-ossp"')
