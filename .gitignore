@@ -1,1 +1,3 @@
 .casesense-storage/
+docker-compose.yml
+.env   
