@@ -49,15 +49,25 @@ class SavedCitationsController extends StateNotifier<SavedCitationsState> {
         'citation_type': state.filter,
         if (state.searchQuery.isNotEmpty) 'q': state.searchQuery,
       };
-      final res = await dio.get(Endpoints.savedCitations, queryParameters: query);
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
-      final items = (raw['items'] ?? unwrapData(res.data)['items']) as List<dynamic>? ?? [];
+      final res = await dio.get(
+        Endpoints.savedCitations,
+        queryParameters: query,
+      );
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      final items =
+          (raw['items'] ?? unwrapData(res.data)['items']) as List<dynamic>? ??
+          [];
       state = state.copyWith(
         isLoading: false,
         citations: items.cast<Map<String, dynamic>>(),
       );
     } on DioException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.error?.toString() ?? e.message);
+      state = state.copyWith(
+        isLoading: false,
+        error: e.error?.toString() ?? e.message,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -78,7 +88,9 @@ class SavedCitationsController extends StateNotifier<SavedCitationsState> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.post(Endpoints.savedCitations, data: data);
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       final saved = raw.containsKey('id') ? raw : unwrapData(res.data);
       state = state.copyWith(
         isLoading: false,
@@ -98,27 +110,38 @@ class SavedCitationsController extends StateNotifier<SavedCitationsState> {
     }
   }
 
-  Future<void> removeCitation(String id) async {
+  Future<bool> removeCitation(String id) async {
     try {
       final dio = ref.read(dioProvider);
       await dio.delete(Endpoints.savedCitationDetail(id));
-    } catch (_) {}
-    state = state.copyWith(
-      citations: state.citations.where((c) => c['id'] != id).toList(),
-    );
+      state = state.copyWith(
+        citations: state.citations.where((c) => c['id'] != id).toList(),
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+      return false;
+    }
   }
 
   Future<bool> updateNote(String id, {String? note, String? label}) async {
     try {
       final dio = ref.read(dioProvider);
-      final res = await dio.patch(Endpoints.savedCitationDetail(id), data: {
-        if (note != null) 'note': note,
-        if (label != null) 'label': label,
-      });
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final res = await dio.patch(
+        Endpoints.savedCitationDetail(id),
+        data: {
+          if (note != null) 'note': note,
+          if (label != null) 'label': label,
+        },
+      );
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       final updated = raw.containsKey('id') ? raw : unwrapData(res.data);
       state = state.copyWith(
-        citations: state.citations.map((c) => c['id'] == id ? updated : c).toList(),
+        citations: state.citations
+            .map((c) => c['id'] == id ? updated : c)
+            .toList(),
       );
       return true;
     } catch (e) {
@@ -127,6 +150,7 @@ class SavedCitationsController extends StateNotifier<SavedCitationsState> {
   }
 }
 
-final savedCitationsControllerProvider = StateNotifierProvider<SavedCitationsController, SavedCitationsState>((ref) {
-  return SavedCitationsController(ref);
-});
+final savedCitationsControllerProvider =
+    StateNotifierProvider<SavedCitationsController, SavedCitationsState>((ref) {
+      return SavedCitationsController(ref);
+    });

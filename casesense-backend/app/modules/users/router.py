@@ -42,7 +42,9 @@ async def oauth_authorize():
     if not oauth.oauth_enabled():
         from app.core.exceptions import NotFoundException
         raise NotFoundException("OAuth is not configured on this deployment.")
-    return oauth.create_authorization_request()
+    from fastapi.responses import RedirectResponse
+    result = oauth.create_authorization_request()
+    return RedirectResponse(url=result["authorization_url"])
 
 
 @oauth_router.post("/callback")

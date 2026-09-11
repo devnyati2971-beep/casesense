@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../providers/auth_controller.dart';
 
-class OAuthCallbackScreen extends StatefulWidget {
+class OAuthCallbackScreen extends ConsumerStatefulWidget {
   final String? code;
   final bool linkRequired;
   
   const OAuthCallbackScreen({super.key, this.code, this.linkRequired = false});
 
   @override
-  State<OAuthCallbackScreen> createState() => _OAuthCallbackScreenState();
+  ConsumerState<OAuthCallbackScreen> createState() => _OAuthCallbackScreenState();
 }
 
-class _OAuthCallbackScreenState extends State<OAuthCallbackScreen> {
+class _OAuthCallbackScreenState extends ConsumerState<OAuthCallbackScreen> {
   @override
   void initState() {
     super.initState();
@@ -20,15 +22,27 @@ class _OAuthCallbackScreenState extends State<OAuthCallbackScreen> {
   }
 
   Future<void> _processOAuth() async {
-    // Simulate backend token exchange
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      if (widget.linkRequired) {
-        // v2.1 Explicit Linking Flow
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please sign in first to link your Google account.')));
+    final uri = Uri.base; // or GoRouterState.of(context).uri if accessible, but Uri.base works perfectly for flutter web routing
+    final code = uri.queryParameters['code'];
+    final stateParam = uri.queryParameters['state'];
+
+    if (code == null || stateParam == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OAuth login failed: Missing code or state.')));
         context.go('/login');
-      } else {
+      }
+      return;
+    }
+
+    final ok = await ref.read(authControllerProvider.notifier).oauthLogin(code, stateParam);
+
+    if (mounted) {
+      if (ok) {
         context.go('/dashboard');
+      } else {
+        final authState = ref.read(authControllerProvider);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authState.error?.toString() ?? 'OAuth login failed.')));
+        context.go('/login');
       }
     }
   }

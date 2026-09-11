@@ -57,12 +57,40 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
+        allow_origin_regex=r"^https?://localhost:\d+$" if settings.is_development else None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     # ── Exception handlers ────────────────────────────────────────────────────
+
+    from fastapi.exceptions import RequestValidationError
+
+    from fastapi.encoders import jsonable_encoder
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        trace_id = request.headers.get("X-Request-ID")
+        errors = exc.errors()
+        message = "Validation Error"
+        if errors:
+            msg = errors[0].get("msg", "")
+            loc = " -> ".join([str(x) for x in errors[0].get("loc", [])])
+            message = f"{msg} ({loc})"
+
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=_error_envelope(
+                CaseSenseError(
+                    message=message,
+                    code="VALIDATION_ERROR",
+                    details={"errors": jsonable_encoder(errors)},
+                ),
+                trace_id,
+            ),
+            headers={"X-Request-ID": trace_id} if trace_id else None,
+        )
 
     @app.exception_handler(CaseSenseError)
     async def casesense_error_handler(request: Request, exc: CaseSenseError) -> JSONResponse:

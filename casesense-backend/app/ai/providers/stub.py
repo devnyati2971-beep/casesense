@@ -1,4 +1,5 @@
 import hashlib
+import json
 import math
 import random
 from typing import List, Optional
@@ -23,6 +24,10 @@ class StubAIProvider(BaseAIProvider):
             vectors.append(unit_vector)
         return vectors
 
-    async def generate_text(self, prompt: str, max_tokens: int = 1024) -> Optional[str]:
-        """Deterministic stub — echoes a marker so callers can detect stub output."""
+    async def generate_text(
+        self, prompt: str, max_tokens: int = 1024, is_json: bool = False
+    ) -> Optional[str]:
+        """Deterministic development response compatible with the provider API."""
+        if is_json:
+            return json.dumps({})
         return f"[STUB] {prompt[:200]}"

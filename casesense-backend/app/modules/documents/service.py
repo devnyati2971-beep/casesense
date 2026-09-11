@@ -166,6 +166,10 @@ class DocumentService:
     async def soft_delete(self, document_id: uuid.UUID, user_id: uuid.UUID) -> None:
         doc = await self.get_document_status(document_id, user_id)
         await self.repo.soft_delete(doc.id)
+        # A library delete is intended to release the user's storage quota, not
+        # merely hide the row from the UI. The DB row remains soft-deleted for
+        # auditability, while the binary object is removed from object storage.
+        await self.storage.delete_object(doc.object_key)
         await AuditService.log(
             db=self.db,
             user_id=user_id,

@@ -16,7 +16,12 @@ class DraftQuestionnaireScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: AppColors.espresso,
         iconTheme: const IconThemeData(color: AppColors.ivory),
-        title: Text('Draft Preparation: Bail Application', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.ivory)),
+        title: Text(
+          'Draft Preparation: Bail Application',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: AppColors.ivory),
+        ),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -26,20 +31,35 @@ class DraftQuestionnaireScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Document Questionnaire', style: Theme.of(context).textTheme.displayMedium),
+                Text(
+                  'Document Questionnaire',
+                  style: Theme.of(context).textTheme.displayMedium,
+                ),
                 const SizedBox(height: 16),
-                Text('CaseSense has auto-filled known details from Case Intelligence. Please provide the remaining information to build your Matter Brief.', 
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze)),
+                Text(
+                  'Provide the case details needed to build your matter brief.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: AppColors.subtleBronze,
+                  ),
+                ),
                 const SizedBox(height: 48),
 
-                // Auto-filled field (Tactile paper look)
-                _buildAutoFilledField(context, 'Accused Name', 'Ramesh Kumar', 'Case Intelligence'),
+                Text(
+                  'Required Information',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.antiqueBrass,
+                  ),
+                ),
                 const SizedBox(height: 24),
-                _buildAutoFilledField(context, 'FIR Number', '245/2024', 'Document Extracted'),
-                const SizedBox(height: 48),
-
-                // Missing required fields
-                Text('Required Information', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.antiqueBrass)),
+                const AppTextField(
+                  label: 'Party / Client Name',
+                  hint: 'Enter the party or client name',
+                ),
+                const SizedBox(height: 24),
+                const AppTextField(
+                  label: 'Case or FIR Number',
+                  hint: 'Enter the case or FIR number, if applicable',
+                ),
                 const SizedBox(height: 24),
                 const AppTextField(
                   label: 'Police Station',
@@ -50,7 +70,7 @@ class DraftQuestionnaireScreen extends ConsumerWidget {
                   label: 'Specific Prayer / Relief Sought',
                   hint: 'State the exact relief you want the court to grant...',
                 ),
-                
+
                 const SizedBox(height: 64),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -63,46 +83,11 @@ class DraftQuestionnaireScreen extends ConsumerWidget {
                       },
                     ),
                   ],
-                )
+                ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildAutoFilledField(BuildContext context, String label, String value, String source) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.parchment,
-        border: Border.all(color: AppColors.stone),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome, color: AppColors.success, size: 12),
-                    const SizedBox(width: 4),
-                    Text('Auto-filled from $source', style: const TextStyle(color: AppColors.success, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
-        ],
       ),
     );
   }

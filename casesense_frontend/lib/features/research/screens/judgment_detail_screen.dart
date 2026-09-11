@@ -16,13 +16,21 @@ class JudgmentDetailScreen extends ConsumerStatefulWidget {
   const JudgmentDetailScreen({super.key, this.judgmentId});
 
   @override
-  ConsumerState<JudgmentDetailScreen> createState() => _JudgmentDetailScreenState();
+  ConsumerState<JudgmentDetailScreen> createState() =>
+      _JudgmentDetailScreenState();
 }
 
 class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
   Map<String, dynamic>? _judgment;
   List<Map<String, dynamic>> _paragraphs = [];
+  List<Map<String, dynamic>> _referencingCitations = [];
+  List<Map<String, dynamic>> _citedAuthorities = [];
+  List<Map<String, dynamic>> _citedBy = [];
+  String? _fullText;
+  String? _hindiText;
   bool _loading = true;
+  bool _loadingFullText = false;
+  bool _translating = false;
   String? _error;
   int _activeTabIndex = 0;
   bool _saved = false;
@@ -42,10 +50,23 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get('/judgments/$id');
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       setState(() {
         _judgment = (raw['judgment'] ?? raw) as Map<String, dynamic>;
         _paragraphs = ((raw['paragraphs'] ?? const []) as List<dynamic>)
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        _referencingCitations =
+            ((raw['referencing_citations'] ?? const []) as List<dynamic>)
+                .whereType<Map<String, dynamic>>()
+                .toList();
+        _citedAuthorities =
+            ((raw['cited_authorities'] ?? const []) as List<dynamic>)
+                .whereType<Map<String, dynamic>>()
+                .toList();
+        _citedBy = ((raw['cited_by'] ?? const []) as List<dynamic>)
             .whereType<Map<String, dynamic>>()
             .toList();
         _loading = false;
@@ -58,25 +79,87 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
     }
   }
 
+  Future<void> _loadFullText() async {
+    if (_fullText != null || _loadingFullText || widget.judgmentId == null)
+      return;
+    setState(() => _loadingFullText = true);
+    try {
+      final res = await ref
+          .read(dioProvider)
+          .get('/judgments/${widget.judgmentId}/full-text');
+      if (mounted)
+        setState(() => _fullText = (res.data['full_text'] ?? '').toString());
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load the full judgment.')),
+        );
+    } finally {
+      if (mounted) setState(() => _loadingFullText = false);
+    }
+  }
+
+  Future<void> _translateOverview() async {
+    final overview =
+        (_judgment?['overview'] as Map<String, dynamic>?) ?? const {};
+    final text =
+        overview['key_passage']?.toString() ??
+        (_paragraphs.isNotEmpty ? _paragraphs.first['text']?.toString() : null);
+    if (text == null || text.isEmpty || _translating) return;
+    setState(() => _translating = true);
+    try {
+      final res = await ref
+          .read(dioProvider)
+          .post('/translate', data: {'text': text, 'target_language': 'hi'});
+      if (mounted)
+        setState(() => _hindiText = res.data['translated_text']?.toString());
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Translation failed: ${_apiErrorMessage(error)}'),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _translating = false);
+    }
+  }
+
+  String _apiErrorMessage(Object error) {
+    final text = error.toString();
+    if (text.contains('429'))
+      return 'too many requests; try again in a minute.';
+    if (text.contains('401')) return 'please sign in again.';
+    if (text.contains('503'))
+      return 'the translation service is temporarily unavailable.';
+    return 'please try again.';
+  }
+
   Future<void> _saveToCollection() async {
     final j = _judgment;
     if (j == null) return;
     final firstPassage = _paragraphs.isNotEmpty ? _paragraphs.first : null;
-    final ok = await ref.read(savedCitationsControllerProvider.notifier).saveCitation({
-      'case_name': j['case_name'] ?? 'Unknown Case',
-      'citation_text': j['citation'],
-      'court': j['court'],
-      'decided_on': j['decided_on'],
-      'judgment_id': j['id'],
-      'passage_text': firstPassage?['text'],
-      'location_label': firstPassage?['location_label'],
-      'support_state': 'VERIFIED',
-      'citation_type': 'judgment',
-    });
+    final ok = await ref
+        .read(savedCitationsControllerProvider.notifier)
+        .saveCitation({
+          'case_name': j['case_name'] ?? 'Unknown Case',
+          'citation_text': j['citation'],
+          'court': j['court'],
+          'decided_on': j['decided_on'],
+          'judgment_id': j['id'],
+          'passage_text': firstPassage?['text'],
+          'location_label': firstPassage?['location_label'],
+          'support_state': 'VERIFIED',
+          'citation_type': 'judgment',
+        });
     if (!mounted) return;
     setState(() => _saved = ok);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'Saved to your citations.' : 'Could not save — try again.')),
+      SnackBar(
+        content: Text(
+          ok ? 'Saved to your citations.' : 'Could not save — try again.',
+        ),
+      ),
     );
   }
 
@@ -98,7 +181,8 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
               alignment: Alignment.centerRight,
               color: AppColors.nearBlack.withOpacity(0.4),
               colorBlendMode: BlendMode.srcATop,
-              errorBuilder: (_, __, ___) => Container(color: AppColors.espresso),
+              errorBuilder: (_, __, ___) =>
+                  Container(color: AppColors.espresso),
             ),
           ),
 
@@ -126,67 +210,106 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
               _buildTopBar(context),
               Expanded(
                 child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.antiqueBrass))
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.antiqueBrass,
+                        ),
+                      )
                     : _error != null
-                        ? Center(
-                            child: Text('Could not load judgment.\n$_error',
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
-                              textAlign: TextAlign.center))
-                        : SingleChildScrollView(
-                            padding: const EdgeInsets.symmetric(horizontal: 64.0, vertical: 24.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Hero Typography
-                                Text(
-                                  _caseName,
-                                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    ? Center(
+                        child: Text(
+                          'Could not load judgment.\n$_error',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(color: AppColors.warmGrey),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 64.0,
+                          vertical: 24.0,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Hero Typography
+                            Text(
+                              _caseName,
+                              style: Theme.of(context).textTheme.displayMedium
+                                  ?.copyWith(
                                     color: AppColors.ivory,
                                     fontSize: 44,
                                     height: 1.1,
                                   ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Text(
+                                  (_judgment?['court'] ?? '—')
+                                      .toString()
+                                      .toUpperCase(),
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: AppColors.warmGrey,
+                                        letterSpacing: 1.5,
+                                      ),
                                 ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Text((_judgment?['court'] ?? '—').toString().toUpperCase(),
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.warmGrey, letterSpacing: 1.5)),
-                                    const SizedBox(width: 16),
-                                    const Text('•', style: TextStyle(color: AppColors.subtleBronze)),
-                                    const SizedBox(width: 16),
-                                    Text((_judgment?['decided_on'] ?? '—').toString().split('T').first,
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.warmGrey)),
-                                    const SizedBox(width: 16),
-                                    const Text('•', style: TextStyle(color: AppColors.subtleBronze)),
-                                    const SizedBox(width: 16),
-                                    Text((_judgment?['citation'] ?? '—').toString(),
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.warmGrey)),
-                                  ],
+                                const SizedBox(width: 16),
+                                const Text(
+                                  '•',
+                                  style: TextStyle(
+                                    color: AppColors.subtleBronze,
+                                  ),
                                 ),
-                                const SizedBox(height: 48),
-
-                                // Tabs
-                                Row(
-                                  children: [
-                                    _buildTab(0, 'Overview'),
-                                    const SizedBox(width: 32),
-                                    _buildTab(1, 'Judgment'),
-                                    const SizedBox(width: 32),
-                                    _buildTab(2, 'Citations'),
-                                  ],
+                                const SizedBox(width: 16),
+                                Text(
+                                  (_judgment?['decided_on'] ?? '—')
+                                      .toString()
+                                      .split('T')
+                                      .first,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: AppColors.warmGrey),
                                 ),
-
-                                Container(
-                                  height: 1,
-                                  width: double.infinity,
-                                  color: AppColors.charcoal,
-                                  margin: const EdgeInsets.only(bottom: 48),
+                                const SizedBox(width: 16),
+                                const Text(
+                                  '•',
+                                  style: TextStyle(
+                                    color: AppColors.subtleBronze,
+                                  ),
                                 ),
-
-                                _buildTabContent(context),
+                                const SizedBox(width: 16),
+                                Text(
+                                  (_judgment?['citation'] ?? '—').toString(),
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(color: AppColors.warmGrey),
+                                ),
                               ],
                             ),
-                          ),
+                            const SizedBox(height: 48),
+
+                            // Tabs
+                            Row(
+                              children: [
+                                _buildTab(0, 'Overview'),
+                                const SizedBox(width: 32),
+                                _buildTab(1, 'Judgment'),
+                                const SizedBox(width: 32),
+                                _buildTab(2, 'Citations'),
+                              ],
+                            ),
+
+                            Container(
+                              height: 1,
+                              width: double.infinity,
+                              color: AppColors.charcoal,
+                              margin: const EdgeInsets.only(bottom: 48),
+                            ),
+
+                            _buildTabContent(context),
+                          ],
+                        ),
+                      ),
               ),
             ],
           ),
@@ -218,9 +341,18 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
               padding: const EdgeInsets.all(8.0),
               child: Row(
                 children: [
-                  const Icon(Icons.arrow_back, color: AppColors.ivory, size: 18),
+                  const Icon(
+                    Icons.arrow_back,
+                    color: AppColors.ivory,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
-                  Text('Case View', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.ivory)),
+                  Text(
+                    'Case View',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: AppColors.ivory),
+                  ),
                 ],
               ),
             ),
@@ -229,12 +361,22 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
             children: [
               OutlinedButton.icon(
                 onPressed: _saved ? null : _saveToCollection,
-                icon: Icon(_saved ? Icons.bookmark : Icons.bookmark_border, color: AppColors.ivory, size: 16),
-                label: Text(_saved ? 'Saved ✓' : 'Save',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.ivory)),
+                icon: Icon(
+                  _saved ? Icons.bookmark : Icons.bookmark_border,
+                  color: AppColors.ivory,
+                  size: 16,
+                ),
+                label: Text(
+                  _saved ? 'Saved ✓' : 'Save',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppColors.ivory),
+                ),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.charcoal),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(40),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -242,14 +384,23 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
                 onPressed: () {
                   final j = _judgment;
                   if (j == null) return;
-                  Clipboard.setData(ClipboardData(
-                    text: '${j['case_name']}\n${j['citation'] ?? ''}',
-                  ));
+                  Clipboard.setData(
+                    ClipboardData(
+                      text: '${j['case_name']}\n${j['citation'] ?? ''}',
+                    ),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Citation copied to clipboard.')),
+                    const SnackBar(
+                      content: Text('Citation copied to clipboard.'),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.share_outlined, color: AppColors.ivory),
+              ),
+              TextButton.icon(
+                onPressed: _translating ? null : _translateOverview,
+                icon: const Icon(Icons.translate, size: 16),
+                label: Text(_hindiText == null ? 'हिंदी' : 'Hindi shown'),
               ),
             ],
           ),
@@ -296,6 +447,11 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
 
   Widget _buildOverview(BuildContext context) {
     final sourceUrl = _judgment?['source_url']?.toString();
+    final overview =
+        (_judgment?['overview'] as Map<String, dynamic>?) ?? const {};
+    final judges = ((_judgment?['judges'] as List<dynamic>?) ?? const [])
+        .where((judge) => judge.toString().trim().isNotEmpty)
+        .join(', ');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -312,31 +468,43 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
               _FactItem(
                 icon: Icons.event,
                 title: 'Decided On',
-                description: (_judgment?['decided_on'] ?? '—').toString().split('T').first,
+                description: (_judgment?['decided_on'] ?? '—')
+                    .toString()
+                    .split('T')
+                    .first,
               ),
-              const SizedBox(height: 40),
-              _FactItem(
-                icon: Icons.people,
-                title: 'Bench',
-                description: ((_judgment?['judges'] as List<dynamic>?) ?? const []).join(', ').isEmpty
-                    ? '—'
-                    : ((_judgment?['judges'] as List<dynamic>?) ?? const []).join(', '),
-              ),
+              if (judges.isNotEmpty) ...[
+                const SizedBox(height: 40),
+                _FactItem(
+                  icon: Icons.people,
+                  title: 'Bench',
+                  description: judges,
+                ),
+              ],
+              if (overview['issue']?.toString().isNotEmpty == true) ...[
+                const SizedBox(height: 40),
+                _FactItem(
+                  icon: Icons.lightbulb_outline,
+                  title: 'Main issue',
+                  description: overview['issue'].toString(),
+                ),
+              ],
             ],
           ),
         ),
         const SizedBox(width: 64),
-        Expanded(
-          flex: 4,
-          child: _buildKeyPassageCard(context, sourceUrl),
-        ),
+        Expanded(flex: 4, child: _buildKeyPassageCard(context, sourceUrl)),
       ],
     );
   }
 
   Widget _buildKeyPassageCard(BuildContext context, String? sourceUrl) {
+    final overview =
+        (_judgment?['overview'] as Map<String, dynamic>?) ?? const {};
     final firstPassage = _paragraphs.isNotEmpty ? _paragraphs.first : null;
-    final passageText = firstPassage?['text']?.toString() ??
+    final passageText =
+        overview['key_passage']?.toString() ??
+        firstPassage?['text']?.toString() ??
         'Passages will appear here once the judgment text has been analyzed.';
     final location = firstPassage?['location_label']?.toString();
 
@@ -357,13 +525,20 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.antiqueBrass.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text('Key Passage${location != null ? ' • $location' : ''}',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.antiqueBrass)),
+                  child: Text(
+                    'Key Passage${location != null ? ' • $location' : ''}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.antiqueBrass,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -374,16 +549,40 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
                     fontStyle: FontStyle.italic,
                   ),
                 ),
+                if (_hindiText != null) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    'हिंदी अनुवाद',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.antiqueBrass,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _hindiText!,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.ivory,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(width: 20, height: 1, color: AppColors.subtleBronze, margin: const EdgeInsets.only(top: 10)),
+                    Container(
+                      width: 20,
+                      height: 1,
+                      color: AppColors.subtleBronze,
+                      margin: const EdgeInsets.only(top: 10),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '${_judgment?['case_name'] ?? ''}\n${_judgment?['citation'] ?? ''}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.warmGrey,
+                        ),
                       ),
                     ),
                   ],
@@ -408,40 +607,105 @@ class _JudgmentDetailScreenState extends ConsumerState<JudgmentDetailScreen> {
   }
 
   Widget _buildJudgmentText(BuildContext context) {
-    if (_paragraphs.isEmpty) {
-      return Text(
-        'Full judgment text has not been analyzed yet for this judgment.',
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+    if (_fullText == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The overview contains the key issue and verified passage. The complete judgment can be very long.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+          ),
+          const SizedBox(height: 20),
+          PrimaryButton(
+            label: _loadingFullText ? 'Loading…' : 'Show full judgment',
+            onPressed: _loadingFullText ? null : _loadFullText,
+          ),
+        ],
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final p in _paragraphs)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (p['location_label'] != null)
-                  Text(p['location_label'].toString(),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.antiqueBrass)),
-                const SizedBox(height: 6),
-                Text(
-                  p['text']?.toString() ?? '',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.ivory.withOpacity(0.85), height: 1.8),
-                ),
-              ],
-            ),
+        Text(
+          _fullText!.isEmpty
+              ? 'No full text is available for this judgment.'
+              : _fullText!,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: AppColors.ivory.withOpacity(0.85),
+            height: 1.8,
           ),
+        ),
       ],
     );
   }
 
   Widget _buildCitations(BuildContext context) {
-    return Text(
-      'Citations referencing this judgment will appear here as your research runs link them.',
-      style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+    if (_referencingCitations.isEmpty &&
+        _citedAuthorities.isEmpty &&
+        _citedBy.isEmpty) {
+      return Text(
+        'Indian Kanoon did not return citation-graph data for this judgment.',
+        style: Theme.of(
+          context,
+        ).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Authorities cited in this judgment',
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(color: AppColors.ivory),
+        ),
+        const SizedBox(height: 16),
+        for (final authority in _citedAuthorities)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.gavel, color: AppColors.antiqueBrass),
+            title: Text(
+              authority['title']?.toString() ?? 'Cited authority',
+              style: const TextStyle(color: AppColors.ivory),
+            ),
+            subtitle: Text(
+              [authority['citation'], authority['court']]
+                  .where((value) => value?.toString().isNotEmpty == true)
+                  .join(' • '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.warmGrey),
+            ),
+          ),
+        if (_referencingCitations.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(
+            'Your saved citations',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(color: AppColors.ivory),
+          ),
+        ],
+        for (final citation in _referencingCitations)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.bookmark, color: AppColors.antiqueBrass),
+            title: Text(
+              citation['location_label']?.toString() ?? 'Saved citation',
+              style: const TextStyle(color: AppColors.ivory),
+            ),
+            subtitle: Text(
+              citation['passage_text']?.toString() ??
+                  citation['note']?.toString() ??
+                  '',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.warmGrey),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -451,7 +715,11 @@ class _FactItem extends StatelessWidget {
   final String title;
   final String description;
 
-  const _FactItem({required this.icon, required this.title, required this.description});
+  const _FactItem({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -472,9 +740,20 @@ class _FactItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.ivory)),
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: AppColors.ivory),
+              ),
               const SizedBox(height: 8),
-              Text(description, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey, height: 1.6)),
+              Text(
+                description,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.warmGrey,
+                  height: 1.6,
+                ),
+              ),
             ],
           ),
         ),

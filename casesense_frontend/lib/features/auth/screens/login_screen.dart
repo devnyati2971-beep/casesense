@@ -6,6 +6,8 @@ import '../../../shared/widgets/auth_scaffold.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_controller.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/api/endpoints.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -38,8 +40,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     await ref.read(authControllerProvider.notifier).login(email, password);
 
+    if (!mounted) return;
+
     final authState = ref.read(authControllerProvider);
-    if (authState.hasValue && authState.value!.isAuthenticated && mounted) {
+    if (authState.hasValue && authState.value!.isAuthenticated) {
       // Return the user to where they were heading (guest → auth upgrade).
       final from = GoRouterState.of(context).uri.queryParameters['from'];
       context.go(from ?? '/dashboard');
@@ -125,7 +129,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         // OAuth Button
         OutlinedButton.icon(
-          onPressed: () => context.push('/oauth/callback'),
+          onPressed: () async {
+            final url = Uri.parse('${Endpoints.baseUrl}/auth/oauth/authorize');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          },
           icon: const Icon(Icons.g_mobiledata, size: 28),
           label: const Text('Continue with Google'),
           style: OutlinedButton.styleFrom(

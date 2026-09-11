@@ -105,7 +105,7 @@ class StorageError(CaseSenseError):
 
 class AIError(CaseSenseError):
     message = "AI operation failed."
-    status_code = 500
+    status_code = 503
     code = "AI_ERROR"
 
 

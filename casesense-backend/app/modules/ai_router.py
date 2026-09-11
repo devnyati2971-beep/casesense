@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_current_user_id, get_db
 from app.common.rate_limit_deps import RateLimitDep
+from app.core.exceptions import AIError, RateLimitError
 from app.ai.orchestrator import get_ai_orchestrator
 
 router = APIRouter(tags=["ai"])
@@ -37,8 +38,15 @@ async def translate_text(
 ):
     """AI usage is rate limited per user (10/min) to protect the token budget (§75.1)."""
     orchestrator = get_ai_orchestrator()
-    translated = await orchestrator.translate_to_hindi(body.text)
+    try:
+        translated = await orchestrator.translate_to_hindi(body.text)
+    except AIError as exc:
+        if "429" in exc.message or "quota" in exc.message.lower():
+            raise RateLimitError("Gemini's request quota is reached. Please wait about one minute and try again.") from exc
+        raise
+    if not translated or translated.startswith("[STUB]"):
+        raise AIError("Translation is temporarily unavailable. Please try again.")
     return TranslateResponse(
-        translated_text=translated or f"[HI] {body.text}",
+        translated_text=translated,
         target_language=body.target_language,
     )

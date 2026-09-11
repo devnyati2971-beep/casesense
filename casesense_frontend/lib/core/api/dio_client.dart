@@ -48,10 +48,10 @@ final dioProvider = Provider<Dio>((ref) {
         }
       }
 
-      // Map standard error envelope
       if (e.response?.data != null && e.response?.data is Map<String, dynamic>) {
         return handler.reject(DioException(
           requestOptions: e.requestOptions,
+          response: e.response,
           error: ApiException.fromJson(e.response!.data),
         ));
       }

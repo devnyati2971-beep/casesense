@@ -56,9 +56,9 @@ GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
 
 def _oauth_config() -> dict[str, Optional[str]]:
     return {
-        "client_id": getattr(settings, "OAUTH_CLIENT_ID", None),
-        "client_secret": getattr(settings, "OAUTH_CLIENT_SECRET", None),
-        "redirect_uri": getattr(settings, "OAUTH_REDIRECT_URI", None),
+        "client_id": getattr(settings, "OAUTH_CLIENT_ID", None) or getattr(settings, "OAUTH_GOOGLE_CLIENT_ID", None),
+        "client_secret": getattr(settings, "OAUTH_CLIENT_SECRET", None) or getattr(settings, "OAUTH_GOOGLE_CLIENT_SECRET", None),
+        "redirect_uri": getattr(settings, "OAUTH_REDIRECT_URI", None) or f"{settings.FRONTEND_BASE_URL}/oauth/callback",
     }
 
 

@@ -57,7 +57,11 @@ class DraftsController extends StateNotifier<DraftsState> {
   }
 
   // 1. Create a new draft
-  Future<String?> createDraft(String matterId, String documentType, {String? title}) async {
+  Future<String?> createDraft(
+    String matterId,
+    String documentType, {
+    String? title,
+  }) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final dio = ref.read(dioProvider);
@@ -68,7 +72,9 @@ class DraftsController extends StateNotifier<DraftsState> {
           if (title != null) 'title': title,
         },
       );
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       final draft = raw.containsKey('id') ? raw : unwrapData(res.data);
       final newDraftId = draft['id']?.toString();
 
@@ -85,15 +91,25 @@ class DraftsController extends StateNotifier<DraftsState> {
   }
 
   // 2. Generate Draft (AI composition) — async job, poll the draft status.
-  Future<bool> generateDraft(String draftId) async {
+  Future<bool> generateDraft(String draftId, {String? instructions}) async {
     state = state.copyWith(isLoading: true, status: 'GENERATING');
     try {
       final dio = ref.read(dioProvider);
-      await dio.post(Endpoints.draftGenerate(draftId));
+      await dio.post(
+        Endpoints.draftGenerate(draftId),
+        data: {
+          if (instructions != null && instructions.trim().isNotEmpty)
+            'argument_focus': instructions.trim(),
+        },
+      );
       _pollDraftStatus(draftId);
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString(), status: 'FAILED');
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+        status: 'FAILED',
+      );
       return false;
     }
   }
@@ -104,7 +120,9 @@ class DraftsController extends StateNotifier<DraftsState> {
       try {
         final dio = ref.read(dioProvider);
         final res = await dio.get(Endpoints.draftDetail(draftId));
-        final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+        final raw = res.data is Map<String, dynamic>
+            ? res.data as Map<String, dynamic>
+            : <String, dynamic>{};
         final draft = raw['draft'] ?? unwrapData(res.data)['draft'] ?? raw;
         final status = draft['status'] ?? 'CREATED';
         final currentVersion = raw['current_version'] as Map<String, dynamic>?;
@@ -114,7 +132,10 @@ class DraftsController extends StateNotifier<DraftsState> {
           draftDetail: currentVersion ?? state.draftDetail,
         );
 
-        if (status == 'GENERATED' || status == 'LAWYER_REVIEW' || status == 'FAILED' || status == 'FINALIZED') {
+        if (status == 'GENERATED' ||
+            status == 'LAWYER_REVIEW' ||
+            status == 'FAILED' ||
+            status == 'FINALIZED') {
           timer.cancel();
           state = state.copyWith(isLoading: false);
         }
@@ -131,9 +152,15 @@ class DraftsController extends StateNotifier<DraftsState> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get(Endpoints.draftDetail(draftId));
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
-      final draft = raw['draft'] as Map<String, dynamic>? ?? unwrapData(res.data)['draft'] as Map<String, dynamic>?;
-      final currentVersion = raw['current_version'] as Map<String, dynamic>? ?? unwrapData(res.data)['current_version'] as Map<String, dynamic>?;
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      final draft =
+          raw['draft'] as Map<String, dynamic>? ??
+          unwrapData(res.data)['draft'] as Map<String, dynamic>?;
+      final currentVersion =
+          raw['current_version'] as Map<String, dynamic>? ??
+          unwrapData(res.data)['current_version'] as Map<String, dynamic>?;
 
       state = state.copyWith(
         isLoading: false,
@@ -147,14 +174,21 @@ class DraftsController extends StateNotifier<DraftsState> {
   }
 
   // 4. Save edited sections (lawyer editing — no silent overwrite)
-  Future<bool> saveSections(String draftId, List<Map<String, dynamic>> sections, {int? expectedVersion}) async {
+  Future<bool> saveSections(
+    String draftId,
+    List<Map<String, dynamic>> sections, {
+    int? expectedVersion,
+  }) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final dio = ref.read(dioProvider);
-      await dio.patch(Endpoints.draftDetail(draftId), data: {
-        if (expectedVersion != null) 'expected_version': expectedVersion,
-        'sections': sections,
-      });
+      await dio.patch(
+        Endpoints.draftDetail(draftId),
+        data: {
+          if (expectedVersion != null) 'expected_version': expectedVersion,
+          'sections': sections,
+        },
+      );
       state = state.copyWith(isLoading: false, status: 'LAWYER_REVIEW');
       return true;
     } catch (e) {
@@ -169,9 +203,14 @@ class DraftsController extends StateNotifier<DraftsState> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.post(Endpoints.draftFinalize(draftId));
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       final draft = raw.containsKey('id') ? raw : unwrapData(res.data);
-      state = state.copyWith(isLoading: false, status: draft['status'] ?? 'FINALIZED');
+      state = state.copyWith(
+        isLoading: false,
+        status: draft['status'] ?? 'FINALIZED',
+      );
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -199,8 +238,12 @@ class DraftsController extends StateNotifier<DraftsState> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get(Endpoints.drafts(matterId));
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
-      final items = (raw['items'] ?? unwrapData(res.data)['items']) as List<dynamic>? ?? [];
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      final items =
+          (raw['items'] ?? unwrapData(res.data)['items']) as List<dynamic>? ??
+          [];
       state = state.copyWith(
         isLoading: false,
         drafts: items.cast<Map<String, dynamic>>(),
@@ -215,8 +258,12 @@ class DraftsController extends StateNotifier<DraftsState> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get('/drafts');
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
-      final items = (raw['items'] ?? unwrapData(res.data)['items']) as List<dynamic>? ?? [];
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      final items =
+          (raw['items'] ?? unwrapData(res.data)['items']) as List<dynamic>? ??
+          [];
       state = state.copyWith(allDrafts: items.cast<Map<String, dynamic>>());
     } catch (_) {
       // Non-fatal — the list stays empty.
@@ -224,6 +271,7 @@ class DraftsController extends StateNotifier<DraftsState> {
   }
 }
 
-final draftsControllerProvider = StateNotifierProvider<DraftsController, DraftsState>((ref) {
-  return DraftsController(ref);
-});
+final draftsControllerProvider =
+    StateNotifierProvider<DraftsController, DraftsState>((ref) {
+      return DraftsController(ref);
+    });

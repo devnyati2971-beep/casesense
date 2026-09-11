@@ -27,6 +27,19 @@ settings.RATE_LIMITING_ENABLED = False
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
+async def use_stub_ai_provider():
+    """Keep tests deterministic even when a developer configured live AI."""
+    import app.ai.orchestrator as orchestrator_module
+
+    previous_provider = settings.AI_PROVIDER
+    settings.AI_PROVIDER = "stub"
+    orchestrator_module._orchestrator = None
+    yield
+    settings.AI_PROVIDER = previous_provider
+    orchestrator_module._orchestrator = None
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_test_db():
     """Create all tables once per test session."""
     engine = create_async_engine(TEST_DB_URL, echo=False, poolclass=NullPool)

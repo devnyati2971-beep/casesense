@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.core.exceptions import AIError, ConflictException, NotFoundException, ValidationException
 from app.modules.audit.service import AuditService
 from app.modules.judgements.models import Judgment, JudgmentPassage
 from app.modules.saved_citations.models import SavedCitation
@@ -244,9 +244,7 @@ class SavedCitationService:
             saved.translated_passage = translated
             saved.translated_at = datetime.now(timezone.utc)
         else:
-            # Deterministic dev fallback — mark the attempt honestly.
-            saved.translated_passage = f"[HI] {source_text}"
-            saved.translated_at = datetime.now(timezone.utc)
+            raise AIError("Translation is temporarily unavailable. Please try again.")
 
         await self.db.commit()
         await self.db.refresh(saved)

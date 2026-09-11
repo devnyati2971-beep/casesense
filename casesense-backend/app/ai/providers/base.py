@@ -10,6 +10,6 @@ class BaseAIProvider(ABC):
         """Generate 1536-dimensional vector embeddings for a batch of strings."""
         pass
 
-    async def generate_text(self, prompt: str, max_tokens: int = 1024) -> Optional[str]:
+    async def generate_text(self, prompt: str, max_tokens: int = 1024, is_json: bool = False) -> Optional[str]:
         """Optional text generation. Providers without chat support return None."""
         return None

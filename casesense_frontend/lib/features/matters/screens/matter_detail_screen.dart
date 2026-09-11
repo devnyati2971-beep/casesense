@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/app_sidebar.dart';
 import '../../../shared/widgets/primary_button.dart';
@@ -12,29 +13,43 @@ class MatterDetailScreen extends ConsumerStatefulWidget {
   final String matterId;
   final String? initialTab;
 
-  const MatterDetailScreen({super.key, required this.matterId, this.initialTab});
+  const MatterDetailScreen({
+    super.key,
+    required this.matterId,
+    this.initialTab,
+  });
 
   @override
   ConsumerState<MatterDetailScreen> createState() => _MatterDetailScreenState();
 }
 
-class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with SingleTickerProviderStateMixin {
+class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     int initialIndex = _getTabIndex(widget.initialTab);
-    _tabController = TabController(length: 4, vsync: this, initialIndex: initialIndex);
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: initialIndex,
+    );
   }
 
   int _getTabIndex(String? tab) {
     switch (tab) {
-      case 'documents': return 0;
-      case 'intelligence': return 1;
-      case 'research': return 2;
-      case 'drafts': return 3;
-      default: return 0;
+      case 'documents':
+        return 0;
+      case 'intelligence':
+        return 1;
+      case 'research':
+        return 2;
+      case 'drafts':
+        return 3;
+      default:
+        return 0;
     }
   }
 
@@ -45,10 +60,79 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
   }
 
   Future<void> _handleUpload() async {
-    // Real file picking would use file_picker; for now, keep the simulated
-    // selection but route it through the real upload API when a path is given.
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'docx', 'txt', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not read that file. Please choose it again.'),
+        ),
+      );
+      return;
+    }
+
+    final uploaded = await ref
+        .read(matterControllerProvider(widget.matterId).notifier)
+        .uploadDocumentBytes(widget.matterId, bytes, file.name);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Uploading document... CaseSense AI will analyze it shortly.')),
+      SnackBar(
+        content: Text(
+          uploaded
+              ? '${file.name} uploaded. CaseSense will analyze it shortly.'
+              : 'Upload failed. Please try a supported file up to 25 MB.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteDocument(Map<String, dynamic> document) async {
+    final documentId = document['id']?.toString();
+    if (documentId == null) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Delete document?'),
+            content: Text(
+              '“${document['file_name'] ?? 'This document'}” will be removed from this matter and storage. This cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    final deleted = await ref
+        .read(matterControllerProvider(widget.matterId).notifier)
+        .deleteDocument(documentId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          deleted
+              ? 'Document deleted and storage released.'
+              : 'Could not delete the document. Please try again.',
+        ),
+      ),
     );
   }
 
@@ -67,10 +151,15 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
               children: [
                 // Header (Dark Immersive)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 48),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 48,
+                    vertical: 48,
+                  ),
                   decoration: const BoxDecoration(
                     color: AppColors.espresso,
-                    border: Border(bottom: BorderSide(color: AppColors.charcoal)),
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.charcoal),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -81,13 +170,18 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
                           Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.arrow_back, color: AppColors.ivory), 
-                                onPressed: () => context.go('/history')
+                                icon: const Icon(
+                                  Icons.arrow_back,
+                                  color: AppColors.ivory,
+                                ),
+                                onPressed: () => context.go('/history'),
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                matterState.matterData?['title'] ?? 'Loading Workspace...', 
-                                style: Theme.of(context).textTheme.displayMedium?.copyWith(color: AppColors.ivory)
+                                matterState.matterData?['title'] ??
+                                    'Loading Workspace...',
+                                style: Theme.of(context).textTheme.displayMedium
+                                    ?.copyWith(color: AppColors.ivory),
                               ),
                             ],
                           ),
@@ -95,8 +189,9 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
                           Padding(
                             padding: const EdgeInsets.only(left: 48.0),
                             child: Text(
-                              '${matterState.matterData?['case_number'] ?? ''} • ${matterState.matterData?['court'] ?? ''}', 
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey)
+                              '${matterState.matterData?['case_number'] ?? ''} • ${matterState.matterData?['court'] ?? ''}',
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(color: AppColors.warmGrey),
                             ),
                           ),
                         ],
@@ -105,11 +200,11 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
                         label: 'Upload Document',
                         icon: Icons.upload_file,
                         onPressed: _handleUpload,
-                      )
+                      ),
                     ],
                   ),
                 ),
-                
+
                 // TabBar Strip
                 Container(
                   color: AppColors.espresso,
@@ -132,8 +227,13 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
                 Expanded(
                   child: Container(
                     color: AppColors.ivory,
-                    child: matterState.isLoading && matterState.matterData == null
-                        ? const Center(child: CircularProgressIndicator(color: AppColors.antiqueBrass))
+                    child:
+                        matterState.isLoading && matterState.matterData == null
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.antiqueBrass,
+                            ),
+                          )
                         : TabBarView(
                             controller: _tabController,
                             children: [
@@ -144,7 +244,7 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
                             ],
                           ),
                   ),
-                )
+                ),
               ],
             ),
           ),
@@ -166,31 +266,52 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.parchment, 
-                borderRadius: BorderRadius.circular(8), 
-                border: Border.all(color: AppColors.stone)
+                color: AppColors.parchment,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.stone),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.picture_as_pdf, color: AppColors.error, size: 28),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.picture_as_pdf,
+                      color: AppColors.error,
+                      size: 28,
+                    ),
                   ),
                   const SizedBox(width: 24),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(doc['file_name'] ?? doc['name'] ?? 'Untitled', style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          doc['file_name'] ?? doc['name'] ?? 'Untitled',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                         const SizedBox(height: 4),
-                        Text('Uploaded ${doc['created_at'] ?? doc['date'] ?? ''}', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey)),
+                        Text(
+                          'Uploaded ${doc['created_at'] ?? doc['date'] ?? ''}',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.warmGrey),
+                        ),
                       ],
                     ),
                   ),
                   StatusChip(status: doc['status']),
                   const SizedBox(width: 24),
-                  IconButton(icon: const Icon(Icons.more_horiz, color: AppColors.charcoal), onPressed: () {}),
+                  IconButton(
+                    tooltip: 'Delete document',
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.error,
+                    ),
+                    onPressed: () => _deleteDocument(doc),
+                  ),
                 ],
               ),
             ),
@@ -205,19 +326,30 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.auto_awesome, size: 64, color: AppColors.antiqueBrass),
+          const Icon(
+            Icons.auto_awesome,
+            size: 64,
+            color: AppColors.antiqueBrass,
+          ),
           const SizedBox(height: 16),
-          Text('Case Intelligence', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            'Case Intelligence',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
           const SizedBox(height: 8),
-          Text('AI has analyzed your documents. 14 facts, 3 issues, and timeline extracted.', 
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze)),
+          Text(
+            'AI has analyzed your documents. 14 facts, 3 issues, and timeline extracted.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze),
+          ),
           const SizedBox(height: 24),
-          PrimaryButton(label: 'Review Intelligence', onPressed: () {})
+          PrimaryButton(label: 'Review Intelligence', onPressed: () {}),
         ],
       ),
     );
   }
-  
+
   Widget _buildResearchTab(BuildContext context) {
     return Center(
       child: Column(
@@ -225,17 +357,27 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
         children: [
           const Icon(Icons.manage_search, size: 64, color: AppColors.charcoal),
           const SizedBox(height: 16),
-          Text('Matter Research', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            'Matter Research',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
           const SizedBox(height: 8),
-          Text('Find and attach verified legal authorities to this specific matter.', 
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze)),
+          Text(
+            'Find and attach verified legal authorities to this specific matter.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze),
+          ),
           const SizedBox(height: 24),
-          PrimaryButton(label: 'Start Research Session', onPressed: () => context.push('/finder'))
+          PrimaryButton(
+            label: 'Start Research Session',
+            onPressed: () => context.push('/finder'),
+          ),
         ],
       ),
     );
   }
-  
+
   Widget _buildDraftsTab(BuildContext context) {
     return Center(
       child: Column(
@@ -243,12 +385,23 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> with Si
         children: [
           const Icon(Icons.edit_document, size: 64, color: AppColors.charcoal),
           const SizedBox(height: 16),
-          Text('Matter Drafts', style: Theme.of(context).textTheme.headlineMedium),
+          Text(
+            'Matter Drafts',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
           const SizedBox(height: 8),
-          Text('Generate AI-assisted legal drafts based on this matter\'s facts and research.', 
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze)),
+          Text(
+            'Generate AI-assisted legal drafts based on this matter\'s facts and research.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze),
+          ),
           const SizedBox(height: 24),
-          PrimaryButton(label: 'Create New Draft', onPressed: () => context.push('/matters/${widget.matterId}/drafts/new'))
+          PrimaryButton(
+            label: 'Create New Draft',
+            onPressed: () =>
+                context.push('/matters/${widget.matterId}/drafts/new'),
+          ),
         ],
       ),
     );

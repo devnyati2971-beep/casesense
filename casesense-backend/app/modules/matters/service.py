@@ -97,6 +97,34 @@ class MatterService:
     async def delete(
         self, matter_id: uuid.UUID, owner_id: uuid.UUID, version: int
     ) -> Matter:
+        # Deleting a matter must also release every document object it owns.
+        # Matter deletion remains soft in the database for audit purposes, but
+        # the source files are no longer retained in object storage.
+        from sqlalchemy import select
+
+        from app.modules.documents.models import Document
+        from app.modules.documents.service import DocumentService
+
+        matter = await self.get(matter_id, owner_id)
+        if matter.version != version:
+            from app.core.exceptions import OptimisticLockError
+
+            raise OptimisticLockError()
+
+        documents = list(
+            (
+                await self.session.execute(
+                    select(Document).where(
+                        Document.matter_id == matter_id,
+                        Document.deleted_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+        )
+        document_service = DocumentService(self.session)
+        for document in documents:
+            await document_service.soft_delete(document.id, owner_id)
+
         matter = await self.repo.soft_delete(matter_id, owner_id, version)
         if matter is None:
             raise MatterAccessDeniedError()

@@ -1,6 +1,7 @@
 import uuid
+import os
 from typing import Optional
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.dependencies import get_current_user_id, get_db
 from app.common.rate_limit import check_rate_limit, peek_guest_quota
@@ -13,8 +14,72 @@ from app.modules.research.schemas import (
     ResearchStatusResponse,
 )
 from app.modules.research.service import ResearchService
+from app.jobs.tasks.document import extract_text_by_pages
+from app.ai.orchestrator import get_ai_orchestrator
 
 router = APIRouter(tags=["research"])
+
+
+@router.post(
+    "/research/document",
+    response_model=ResearchAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Find authorities from an uploaded document without creating a matter",
+)
+async def create_document_research(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
+):
+    """Extract a one-off document locally, then search authorities from its issues.
+
+    This deliberately does not persist the binary or create a Matter. Matters
+    are for case-file management; Citation Finder is for ad-hoc research.
+    """
+    suffix = os.path.splitext(file.filename or "")[1].lower()
+    allowed = {".pdf", ".docx", ".txt"}
+    if suffix not in allowed:
+        raise HTTPException(status_code=422, detail="Upload a PDF, DOCX, or TXT file.")
+    content = await file.read()
+    if not content or len(content) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="Document must be between 1 byte and 25 MB.")
+    mime_type = {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".txt": "text/plain",
+    }[suffix]
+    pages = await extract_text_by_pages(content, mime_type)
+    text = "\n".join(page["text"] for page in pages).strip()
+    if len(text) < 80:
+        raise HTTPException(status_code=422, detail="No usable text found. Use a text-based PDF, DOCX, or TXT file.")
+
+    prompt = f"""Extract one precise Indian legal research query from this document.
+Return JSON only: {{"query": "..."}}. Include the governing statute/section and disputed issue where present. Do not use generic terms such as 'landmark judgment'.
+
+DOCUMENT:\n{text[:12000]}"""
+    ai = get_ai_orchestrator()
+    query = ""
+    try:
+        import json
+        parsed = json.loads(await ai.generate_json(prompt, max_tokens=180) or "{}")
+        query = str(parsed.get("query") or "").strip()
+    except Exception:
+        pass
+    if len(query) < 10:
+        # A safe fallback makes the route usable during transient AI quota
+        # limits, while still grounding the search in the uploaded document.
+        query = " ".join(text.split())[:500]
+
+    await check_rate_limit("research_query_user", f"user:{user_id}")
+    service = ResearchService(db)
+    session_id, _ = await service.initiate_query_research(
+        user_id=user_id, query=query, matter_id=None
+    )
+    return ResearchAcceptedResponse(
+        session_id=session_id,
+        status_url=f"/api/v1/research/{session_id}",
+    )
 
 
 async def _quota_payload(identity: str) -> dict:

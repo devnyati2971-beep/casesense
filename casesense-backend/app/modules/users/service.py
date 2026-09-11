@@ -37,6 +37,15 @@ _AUTH_TOKEN_TTL = timedelta(hours=settings.VERIFICATION_TOKEN_TTL_HOURS)
 _RESET_TOKEN_TTL = timedelta(minutes=settings.RESET_TOKEN_TTL_MINUTES)
 
 
+def _validate_password_strength(password: str) -> None:
+    """Apply the same password policy to registration, reset, and change."""
+    if len(password) < 8 or not any(c.isupper() for c in password) or not any(c.isdigit() for c in password):
+        raise ValidationError(
+            "Password must be at least 8 characters and include an uppercase letter and a digit.",
+            code="WEAK_PASSWORD",
+        )
+
+
 class UserService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -154,7 +163,7 @@ class UserService:
             expires_at=datetime.now(tz=timezone.utc) + _AUTH_TOKEN_TTL,
             requested_ip=ip_address,
         )
-        link = f"{settings.FRONTEND_BASE_URL}/#/verify-email?token={raw_token}"
+        link = f"{settings.FRONTEND_BASE_URL}/verify-email?token={raw_token}"
         await EmailService.send(
             db=self.session,
             to_email=user.email,
@@ -206,7 +215,7 @@ class UserService:
             user.id, "PASSWORD_RESET", raw_token,
             expires_at=datetime.now(tz=timezone.utc) + _RESET_TOKEN_TTL,
         )
-        link = f"{settings.FRONTEND_BASE_URL}/#/reset-password?token={raw_token}"
+        link = f"{settings.FRONTEND_BASE_URL}/reset-password?token={raw_token}"
         await EmailService.send(
             db=self.session, to_email=user.email, template="reset_password",
             params={"link": link}, user_id=user.id,
@@ -214,8 +223,7 @@ class UserService:
         await self.session.commit()
 
     async def reset_password(self, raw_token: str, new_password: str) -> None:
-        if len(new_password) < 8:
-            raise ValidationError("WEAK_PASSWORD", code="WEAK_PASSWORD")
+        _validate_password_strength(new_password)
 
         token = await self.repo.get_auth_token("PASSWORD_RESET", raw_token)
         now = datetime.now(tz=timezone.utc)
@@ -254,8 +262,7 @@ class UserService:
         user_agent: str | None = None,
         ip_address: str | None = None,
     ) -> tuple[User, TokenPair | None]:
-        if len(new_password) < 8:
-            raise ValidationError("WEAK_PASSWORD", code="WEAK_PASSWORD")
+        _validate_password_strength(new_password)
 
         user = await self.repo.get_by_id(user_id)
         if user is None:

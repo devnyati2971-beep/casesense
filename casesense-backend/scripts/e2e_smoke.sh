@@ -1,6 +1,7 @@
 #!/bin/bash
 # CaseSense E2E smoke test — starts API, runs the core flow, reports.
-cd /home/kartik/Desktop/casesense/casesense-backend
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 # Start API server + arq worker in background
 venv/bin/uvicorn app.main:app --port 8010 > /tmp/cs_e2e_api.log 2>&1 &

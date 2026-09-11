@@ -10,7 +10,9 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+# pyrefly: ignore [missing-import]
 from pydantic import Field, field_validator
+# pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,15 +71,18 @@ class Settings(BaseSettings):
     STORAGE_ACCESS_KEY_ID: str = ""
     STORAGE_SECRET_ACCESS_KEY: str = ""
     STORAGE_BUCKET_NAME: str = "casesense-documents"
-    STORAGE_REGION: str = "ap-mumbai-1"
+    STORAGE_REGION: str = "ap-south-1"
 
     # ── AI (v2.2: Google Gemini is the selected MVP provider) ────────────────
     AI_PROVIDER: Literal["gemini", "openai", "stub"] = "stub"
     AI_API_BASE_URL: str = ""
     AI_API_KEY: str = ""
-    AI_MODEL_STRONG: str = "gemini-2.0-flash"
-    AI_MODEL_FAST: str = "gemini-2.0-flash-lite"
-    AI_MODEL_EMBED: str = "text-embedding-004"
+    AI_MODEL_STRONG: str = "gemini-3.6-flash"
+    AI_MODEL_FAST: str = "gemini-3.6-flash-lite"
+    # The database stores 1,536-dimensional vectors.  ``gemini-embedding-001``
+    # supports that output size through the OpenAI-compatible ``dimensions``
+    # parameter, unlike the retired text-embedding-004 default.
+    AI_MODEL_EMBED: str = "gemini-embedding-001"
     AI_MAX_RETRIES: int = 3
     AI_FALLBACK_ALLOW_LEGAL: bool = False
 
@@ -107,6 +112,9 @@ class Settings(BaseSettings):
 
     # ── Auth / OAuth (v2.1) ───────────────────────────────────────────────────
     FRONTEND_BASE_URL: str = "http://localhost:3000"
+    OAUTH_CLIENT_ID: str = ""
+    OAUTH_CLIENT_SECRET: str = ""
+    OAUTH_REDIRECT_URI: str = ""
     OAUTH_GOOGLE_CLIENT_ID: str = ""
     OAUTH_GOOGLE_CLIENT_SECRET: str = ""
     OAUTH_GOOGLE_ISSUER: str = "https://accounts.google.com"

@@ -10,6 +10,7 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/auth/screens/verify_email_screen.dart';
 import '../../features/auth/screens/forgot_password_screen.dart';
+import '../../features/auth/screens/reset_password_screen.dart';
 import '../../features/auth/screens/oauth_callback_screen.dart';
 import '../../features/account/screens/account_screen.dart';
 
@@ -79,20 +80,31 @@ bool _isPublicLocation(String location) {
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authController = ref.watch(authControllerProvider);
-
-  return GoRouter(
+  // GoRouter owns navigation state. Recreating it on every auth-state change
+  // resets it to `initialLocation`, which made a successful login appear to
+  // land on the dashboard as a guest. Keep one router and refresh redirects.
+  late final GoRouter router;
+  router = GoRouter(
     initialLocation: '/dashboard',
     redirect: (context, state) {
+      final authController = ref.read(authControllerProvider);
       final location = state.matchedLocation;
       final isAuthRoute = location == '/login' ||
           location == '/register' ||
           location == '/verify-email' ||
           location == '/forgot-password' ||
+          location == '/reset-password' ||
+          location.startsWith('/oauth/callback');
+      // A reset link must remain reachable even in a browser that already has
+      // a valid session; it is a token-authorized action, not a sign-in page.
+      final isPostAuthRoute = location == '/login' ||
+          location == '/register' ||
+          location == '/forgot-password' ||
           location.startsWith('/oauth/callback');
 
       final authState = authController.value;
       final isAuthed = authState?.isAuthenticated ?? false;
+      final isVerified = authState?.isVerified ?? false;
 
       // Wait for auth check to finish before redirecting.
       if (authController.isLoading) return null;
@@ -102,9 +114,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         final from = state.uri.toString();
         return '/login?from=$from';
       }
-      if (isAuthed && isAuthRoute) {
-        return '/dashboard';
+
+      if (isAuthed) {
+        if (!isVerified && location != '/verify-email') {
+          return '/verify-email';
+        }
+        if (isVerified && isPostAuthRoute) {
+          return '/dashboard';
+        }
       }
+
       return null;
     },
     routes: [
@@ -115,6 +134,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/register', pageBuilder: (context, state) => buildPageWithDefaultTransition(context: context, state: state, child: const RegisterScreen())),
       GoRoute(path: '/verify-email', builder: (context, state) => const VerifyEmailScreen()),
       GoRoute(path: '/forgot-password', pageBuilder: (context, state) => buildPageWithDefaultTransition(context: context, state: state, child: const ForgotPasswordScreen())),
+      GoRoute(path: '/reset-password', pageBuilder: (context, state) => buildPageWithDefaultTransition(context: context, state: state, child: const ResetPasswordScreen())),
       GoRoute(
         path: '/oauth/callback', 
         pageBuilder: (context, state) {
@@ -167,4 +187,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  ref.listen<AsyncValue<AuthState>>(authControllerProvider, (_, __) {
+    router.refresh();
+  });
+  ref.onDispose(router.dispose);
+  return router;
 });

@@ -17,6 +17,36 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   bool _checking = false;
+  bool _processingLink = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // GoRouterState is inherited from the route, so read it after initState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final token = GoRouterState.of(context).uri.queryParameters['token'];
+      if (token != null && token.isNotEmpty) {
+        _verifyLink(token);
+      }
+    });
+  }
+
+  Future<void> _verifyLink(String token) async {
+    setState(() => _processingLink = true);
+    await ref.read(authControllerProvider.notifier).verifyEmail(token);
+    if (!mounted) return;
+    setState(() => _processingLink = false);
+
+    final auth = ref.read(authControllerProvider);
+    if (auth.value?.isVerified == true) {
+      context.go('/dashboard');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.error?.toString() ?? 'This verification link is invalid or has expired.')),
+      );
+    }
+  }
 
   Future<void> _checkVerified() async {
     setState(() => _checking = true);
@@ -98,7 +128,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
         const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,
-          child: _checking
+          child: (_checking || _processingLink)
               ? const Center(child: CircularProgressIndicator(color: AppColors.antiqueBrass))
               : PrimaryButton(
                   label: 'I have verified my email',

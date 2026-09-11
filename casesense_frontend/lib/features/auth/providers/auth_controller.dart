@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/api/dio_client.dart';
 import '../../../core/api/endpoints.dart';
+import '../../../core/api/api_exception.dart';
 import '../../../core/storage/secure_storage.dart';
 
 class AuthState {
@@ -35,6 +36,13 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     checkAuthStatus();
   }
 
+  String _extractErrorMessage(Object e) {
+    if (e is DioException && e.error is ApiException) {
+      return (e.error as ApiException).message;
+    }
+    return e.toString();
+  }
+
   Future<void> checkAuthStatus() async {
     final storage = ref.read(secureStorageProvider);
     final token = await storage.getAccessToken();
@@ -57,10 +65,10 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
         await storage.clearTokens();
         state = AsyncValue.data(AuthState(isAuthenticated: false, isVerified: false));
       } else {
-        state = AsyncValue.error(e, StackTrace.current);
+        state = AsyncValue.error(_extractErrorMessage(e), StackTrace.current);
       }
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      state = AsyncValue.error(_extractErrorMessage(e), st);
     }
   }
 
@@ -82,7 +90,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
         user: user,
       ));
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      state = AsyncValue.error(_extractErrorMessage(e), st);
     }
   }
 
@@ -117,7 +125,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
       ));
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      state = AsyncValue.error(_extractErrorMessage(e), st);
       return false;
     }
   }
@@ -136,19 +144,49 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     state = AsyncValue.data(AuthState(isAuthenticated: false, isVerified: false));
   }
 
+  Future<bool> oauthLogin(String code, String stateParam) async {
+    state = const AsyncValue.loading();
+    try {
+      final dio = ref.read(dioProvider);
+      final res = await dio.post('/auth/oauth/callback', data: {
+        'code': code,
+        'state': stateParam,
+      });
+      final data = unwrapData(res.data);
+      final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
+      final user = (data['user'] as Map<String, dynamic>?) ?? {};
+      await ref.read(secureStorageProvider).saveTokens(
+        tokens['access_token'] ?? '',
+        tokens['refresh_token'] ?? '',
+      );
+      state = AsyncValue.data(AuthState(
+        isAuthenticated: true,
+        isVerified: user['is_verified'] == true,
+        user: user,
+      ));
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(_extractErrorMessage(e), st);
+      return false;
+    }
+  }
+
   Future<void> verifyEmail(String token) async {
+    // Keep the logged-in user while the verification request is in flight.
+    // Reading state after setting loading always produced null and discarded
+    // the profile from the sidebar.
+    final current = state.value;
     state = const AsyncValue.loading();
     try {
       final dio = ref.read(dioProvider);
       await dio.post(Endpoints.verifyEmail, data: {'token': token});
-      final current = state.value;
       state = AsyncValue.data(AuthState(
         isAuthenticated: current?.isAuthenticated ?? true,
         isVerified: true,
         user: current?.user,
       ));
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      state = AsyncValue.error(_extractErrorMessage(e), st);
     }
   }
 }

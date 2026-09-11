@@ -6,7 +6,7 @@ is (max_requests, window_seconds) and keyed by a client identity:
 authenticated user id when available, else client IP.
 
 Endpoints currently enforced (§75.1 + v2.2 guest flow):
-  - POST /auth/register                -> 5 / hour   per IP
+  - POST /auth/register                -> 50 / hour   per IP
   - POST /auth/login                   -> 10 / 5min  per IP
   - POST /auth/resend-verification     -> 1 / minute per IP+email  (OTP/email exhaustion guard)
   - POST /auth/forgot-password         -> 1 / minute per IP+email  (OTP/email exhaustion guard)

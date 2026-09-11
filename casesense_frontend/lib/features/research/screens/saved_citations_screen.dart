@@ -12,7 +12,8 @@ class SavedCitationsScreen extends ConsumerStatefulWidget {
   const SavedCitationsScreen({super.key});
 
   @override
-  ConsumerState<SavedCitationsScreen> createState() => _SavedCitationsScreenState();
+  ConsumerState<SavedCitationsScreen> createState() =>
+      _SavedCitationsScreenState();
 }
 
 class _SavedCitationsScreenState extends ConsumerState<SavedCitationsScreen> {
@@ -43,7 +44,9 @@ class _SavedCitationsScreenState extends ConsumerState<SavedCitationsScreen> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get('/saved-citations/counts');
-      final data = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : {};
+      final data = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : {};
       if (mounted) setState(() => _counts.addAll(data.cast<String, int>()));
     } catch (_) {}
   }
@@ -76,8 +79,12 @@ class _SavedCitationsScreenState extends ConsumerState<SavedCitationsScreen> {
                     counts: _counts,
                     filters: _filters,
                     onSelect: (c) => setState(() => _selected = c),
-                    onFilter: (t) => ref.read(savedCitationsControllerProvider.notifier).setFilter(t),
-                    onSearch: (q) => ref.read(savedCitationsControllerProvider.notifier).search(q),
+                    onFilter: (t) => ref
+                        .read(savedCitationsControllerProvider.notifier)
+                        .setFilter(t),
+                    onSearch: (q) => ref
+                        .read(savedCitationsControllerProvider.notifier)
+                        .search(q),
                   ),
                 ),
                 if (_selected != null && isWide)
@@ -85,12 +92,15 @@ class _SavedCitationsScreenState extends ConsumerState<SavedCitationsScreen> {
                     flex: 4,
                     child: Container(
                       decoration: const BoxDecoration(
-                        border: Border(left: BorderSide(color: AppColors.stone)),
+                        border: Border(
+                          left: BorderSide(color: AppColors.stone),
+                        ),
                       ),
                       child: _DetailLayout(
                         citation: _selected!,
                         onBack: () => setState(() => _selected = null),
                         onTranslate: () => _translate(_selected!),
+                        onShare: (text) => _share(text),
                       ),
                     ),
                   ),
@@ -105,10 +115,20 @@ class _SavedCitationsScreenState extends ConsumerState<SavedCitationsScreen> {
   Future<void> _translate(Map<String, dynamic> citation) async {
     try {
       final dio = ref.read(dioProvider);
-      await dio.post('/saved-citations/${citation['id']}/translate');
+      final res = await dio.post(
+        '/saved-citations/${citation['id']}/translate',
+      );
+      final translated = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       if (!mounted) return;
+      setState(() => _selected = translated);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Translated to Hindi (shown in the detail view).')),
+        const SnackBar(
+          content: Text(
+            'Hindi translation added. The detail now shows both languages.',
+          ),
+        ),
       );
       await _load();
     } catch (_) {
@@ -117,6 +137,14 @@ class _SavedCitationsScreenState extends ConsumerState<SavedCitationsScreen> {
         const SnackBar(content: Text('Translation failed — try again.')),
       );
     }
+  }
+
+  Future<void> _share(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Citation copied to your clipboard.')),
+    );
   }
 }
 
@@ -157,7 +185,10 @@ class _ListLayout extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Saved Citations', style: Theme.of(context).textTheme.displayMedium),
+                  Text(
+                    'Saved Citations',
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
                   ElevatedButton.icon(
                     onPressed: () {},
                     icon: const Icon(Icons.add, size: 16),
@@ -165,14 +196,21 @@ class _ListLayout extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.charcoal,
                       foregroundColor: AppColors.ivory,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Your collection of important judgments, cases, and legal authorities.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey)),
+              Text(
+                'Your collection of important judgments, cases, and legal authorities.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+              ),
               const SizedBox(height: 24),
 
               // Count chips: All (12) Judgments (8) Acts (2)...
@@ -185,8 +223,8 @@ class _ListLayout extends StatelessWidget {
                       label: counts[type] != null && type != 'all'
                           ? '$label (${counts[type]})'
                           : type == 'all' && counts['all'] != null
-                              ? '$label (${counts['all']})'
-                              : label,
+                          ? '$label (${counts['all']})'
+                          : label,
                       isActive: activeFilter == type,
                       onTap: () => onFilter(type),
                     ),
@@ -199,7 +237,10 @@ class _ListLayout extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.parchment,
                         borderRadius: BorderRadius.circular(24),
@@ -207,7 +248,11 @@ class _ListLayout extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.search, color: AppColors.subtleBronze, size: 18),
+                          const Icon(
+                            Icons.search,
+                            color: AppColors.subtleBronze,
+                            size: 18,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: TextField(
@@ -237,7 +282,13 @@ class _ListLayout extends StatelessWidget {
                       underline: const SizedBox.shrink(),
                       borderRadius: BorderRadius.circular(12),
                       items: const [
-                        DropdownMenuItem(value: 'recent', child: Text('Recently Saved', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(
+                          value: 'recent',
+                          child: Text(
+                            'Recently Saved',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
                       ],
                       onChanged: (_) {},
                     ),
@@ -252,32 +303,50 @@ class _ListLayout extends StatelessWidget {
         // List
         Expanded(
           child: state.isLoading && citations.isEmpty
-              ? const Center(child: CircularProgressIndicator(color: AppColors.antiqueBrass))
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.antiqueBrass,
+                  ),
+                )
               : citations.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.bookmark_outline, size: 64, color: AppColors.stone),
-                          const SizedBox(height: 16),
-                          Text('No saved citations yet', style: Theme.of(context).textTheme.headlineMedium),
-                          const SizedBox(height: 8),
-                          Text('Use the Citation Finder to save verified authorities.',
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze)),
-                        ],
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.bookmark_outline,
+                        size: 64,
+                        color: AppColors.stone,
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(48, 8, 48, 40),
-                      itemCount: citations.length,
-                      itemBuilder: (context, index) {
-                        final citation = citations[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _CitationCard(citation: citation, onTap: () => onSelect(citation)),
-                        );
-                      },
-                    ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No saved citations yet',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Use the Citation Finder to save verified authorities.',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.subtleBronze,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(48, 8, 48, 40),
+                  itemCount: citations.length,
+                  itemBuilder: (context, index) {
+                    final citation = citations[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _CitationCard(
+                        citation: citation,
+                        onTap: () => onSelect(citation),
+                      ),
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -298,7 +367,8 @@ class _CitationCard extends StatelessWidget {
     final citationText = citation['citation_text'];
     final court = citation['court'];
     final decidedOn = citation['decided_on'];
-    final passageText = citation['passage_text'] ?? citation['proposition_text'];
+    final passageText =
+        citation['passage_text'] ?? citation['proposition_text'];
     final type = (citation['citation_type'] ?? 'judgment').toString();
     final tags = (citation['tags'] as List<dynamic>?) ?? const [];
     final location = citation['location_label'];
@@ -313,70 +383,93 @@ class _CitationCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.stone),
         ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      citationText != null && citationText.toString().isNotEmpty
-                          ? '$caseName $citationText'
-                          : caseName,
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20),
-                    ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    citationText != null && citationText.toString().isNotEmpty
+                        ? '$caseName $citationText'
+                        : caseName,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.headlineMedium?.copyWith(fontSize: 20),
                   ),
-                  StatusChip(status: type.toUpperCase()),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Meta row: court • date
-              Wrap(
-                spacing: 12,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (court?.toString().isNotEmpty == true) ...[
-                    const Icon(Icons.account_balance, size: 13, color: AppColors.warmGrey),
-                    Text(court.toString(), style: Theme.of(context).textTheme.labelSmall),
-                  ],
-                  if (decidedOn != null) ...[
-                    const Icon(Icons.event, size: 13, color: AppColors.warmGrey),
-                    Text(decidedOn.toString().split('T').first, style: Theme.of(context).textTheme.labelSmall),
-                  ],
-                  for (final tag in tags.take(3))
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.antiqueBrass.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(tag.toString(),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.subtleBronze, fontSize: 10)),
-                    ),
-                ],
-              ),
-              if (passageText?.toString().isNotEmpty == true) ...[
-                const SizedBox(height: 14),
-                Text(
-                  '“$passageText”',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.charcoal,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
+                StatusChip(status: type.toUpperCase()),
               ],
-              if (location?.toString().isNotEmpty == true) ...[
-                const SizedBox(height: 6),
-                Text(location.toString(), style: Theme.of(context).textTheme.labelSmall),
+            ),
+            const SizedBox(height: 10),
+            // Meta row: court • date
+            Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (court?.toString().isNotEmpty == true) ...[
+                  const Icon(
+                    Icons.account_balance,
+                    size: 13,
+                    color: AppColors.warmGrey,
+                  ),
+                  Text(
+                    court.toString(),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+                if (decidedOn != null) ...[
+                  const Icon(Icons.event, size: 13, color: AppColors.warmGrey),
+                  Text(
+                    decidedOn.toString().split('T').first,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+                for (final tag in tags.take(3))
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.antiqueBrass.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      tag.toString(),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.subtleBronze,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
               ],
+            ),
+            if (passageText?.toString().isNotEmpty == true) ...[
+              const SizedBox(height: 14),
+              Text(
+                '“$passageText”',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.charcoal,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
-          ),
+            if (location?.toString().isNotEmpty == true) ...[
+              const SizedBox(height: 6),
+              Text(
+                location.toString(),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ],
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -386,8 +479,14 @@ class _DetailLayout extends StatelessWidget {
   final Map<String, dynamic> citation;
   final VoidCallback onBack;
   final Future<void> Function() onTranslate;
+  final Future<void> Function(String text) onShare;
 
-  const _DetailLayout({required this.citation, required this.onBack, required this.onTranslate});
+  const _DetailLayout({
+    required this.citation,
+    required this.onBack,
+    required this.onTranslate,
+    required this.onShare,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -397,9 +496,11 @@ class _DetailLayout extends StatelessWidget {
     final decidedOn = citation['decided_on'];
     final judges = (citation['judges'] as List<dynamic>?) ?? const [];
     const category = null; // shown via tags/provisions below
-    final provisions = (citation['related_provisions'] as List<dynamic>?) ?? const [];
+    final provisions =
+        (citation['related_provisions'] as List<dynamic>?) ?? const [];
     final summary = citation['summary'];
-    final passageText = citation['passage_text'] ?? citation['proposition_text'];
+    final passageText =
+        citation['passage_text'] ?? citation['proposition_text'];
     final translated = citation['translated_passage'];
     final location = citation['location_label'];
     final supportState = citation['support_state'] ?? 'VERIFIED';
@@ -415,13 +516,18 @@ class _DetailLayout extends StatelessWidget {
               IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Saved Citation', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 28)),
+                child: Text(
+                  'Saved Citation',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.displayMedium?.copyWith(fontSize: 28),
+                ),
               ),
               // Action row (mockup: Save ✓ | Translate to Hindi | Share)
               OutlinedButton.icon(
-                onPressed: () => Clipboard.setData(ClipboardData(
-                  text: '$caseName ${citationText ?? ''}'.trim(),
-                )),
+                onPressed: () => Clipboard.setData(
+                  ClipboardData(text: '$caseName ${citationText ?? ''}'.trim()),
+                ),
                 icon: const Icon(Icons.bookmark, size: 16),
                 label: const Text('Saved'),
               ),
@@ -433,18 +539,27 @@ class _DetailLayout extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               OutlinedButton.icon(
-                onPressed: () => Clipboard.setData(ClipboardData(
-                  text: '$caseName\n${citationText ?? ''}\n\n$passageText',
-                )),
+                onPressed: () =>
+                    onShare('$caseName\n${citationText ?? ''}\n\n$passageText'),
                 icon: const Icon(Icons.share_outlined, size: 16),
                 label: const Text('Share'),
               ),
             ],
           ),
           const SizedBox(height: 24),
-          Text(caseName, style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 34)),
+          Text(
+            caseName,
+            style: Theme.of(
+              context,
+            ).textTheme.displayMedium?.copyWith(fontSize: 34),
+          ),
           if (citationText?.toString().isNotEmpty == true)
-            Text(citationText.toString(), style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey)),
+            Text(
+              citationText.toString(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+            ),
           const SizedBox(height: 20),
 
           // Meta grid (mockup: Judgment | Court | Date | Bench | Citation | Category | Related Articles)
@@ -460,13 +575,19 @@ class _DetailLayout extends StatelessWidget {
                 if (court?.toString().isNotEmpty == true)
                   _MetaRow(label: 'Court', value: court.toString()),
                 if (decidedOn != null)
-                  _MetaRow(label: 'Decided On', value: decidedOn.toString().split('T').first),
+                  _MetaRow(
+                    label: 'Decided On',
+                    value: decidedOn.toString().split('T').first,
+                  ),
                 if (judges.isNotEmpty)
                   _MetaRow(label: 'Bench', value: judges.join(', ')),
                 if (citationText?.toString().isNotEmpty == true)
                   _MetaRow(label: 'Citation', value: citationText.toString()),
                 if (provisions.isNotEmpty)
-                  _MetaRow(label: 'Related Provisions', value: provisions.join(', ')),
+                  _MetaRow(
+                    label: 'Related Provisions',
+                    value: provisions.join(', '),
+                  ),
               ],
             ),
           ),
@@ -490,7 +611,9 @@ class _DetailLayout extends StatelessWidget {
                     children: [
                       Text(
                         'Source Passage${location != null ? ' ($location)' : ''}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.warmGrey),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.warmGrey,
+                        ),
                       ),
                       StatusChip(status: supportState),
                     ],
@@ -498,7 +621,11 @@ class _DetailLayout extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     '“$passageText”\n\n— $caseName${citationText != null ? ' $citationText' : ''}',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.ivory, fontStyle: FontStyle.italic, height: 1.7),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.ivory,
+                      fontStyle: FontStyle.italic,
+                      height: 1.7,
+                    ),
                   ),
                   if (translated?.toString().isNotEmpty == true) ...[
                     const SizedBox(height: 20),
@@ -513,16 +640,24 @@ class _DetailLayout extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.g_translate, color: AppColors.antiqueBrass, size: 14),
+                              const Icon(
+                                Icons.g_translate,
+                                color: AppColors.antiqueBrass,
+                                size: 14,
+                              ),
                               const SizedBox(width: 8),
-                              Text('हिन्दी अनुवाद (Hindi Translation)',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.antiqueBrass)),
+                              Text(
+                                'हिन्दी अनुवाद (Hindi Translation)',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: AppColors.antiqueBrass),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 10),
                           Text(
                             translated.toString(),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.ivory, height: 1.7),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.ivory, height: 1.7),
                           ),
                         ],
                       ),
@@ -545,7 +680,12 @@ class _DetailLayout extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppColors.stone),
               ),
-              child: Text(summary.toString(), style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.7)),
+              child: Text(
+                summary.toString(),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(height: 1.7),
+              ),
             ),
             const SizedBox(height: 24),
           ],
@@ -559,9 +699,14 @@ class _DetailLayout extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.antiqueBrass.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.antiqueBrass.withOpacity(0.3)),
+                border: Border.all(
+                  color: AppColors.antiqueBrass.withOpacity(0.3),
+                ),
               ),
-              child: Text(citation['note'].toString(), style: Theme.of(context).textTheme.bodyMedium),
+              child: Text(
+                citation['note'].toString(),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ],
         ],
@@ -583,8 +728,23 @@ class _MetaRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 170, child: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey))),
-          Expanded(child: Text(value, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+          SizedBox(
+            width: 170,
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
@@ -599,7 +759,13 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.antiqueBrass, letterSpacing: 0.5)),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: AppColors.antiqueBrass,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 }
@@ -611,7 +777,11 @@ class _CountChip extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _CountChip({required this.label, required this.isActive, required this.onTap});
+  const _CountChip({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -623,7 +793,9 @@ class _CountChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: isActive ? AppColors.charcoal : AppColors.parchment,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isActive ? AppColors.charcoal : AppColors.stone),
+          border: Border.all(
+            color: isActive ? AppColors.charcoal : AppColors.stone,
+          ),
         ),
         child: Text(
           label,

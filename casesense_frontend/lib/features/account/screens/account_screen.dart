@@ -18,7 +18,12 @@ class AccountScreen extends ConsumerStatefulWidget {
 class _AccountScreenState extends ConsumerState<AccountScreen> {
   int _activeTab = 0;
 
-  static const List<String> _tabs = ['Profile', 'Security', 'Preferences', 'Subscription', 'About'];
+  static const List<String> _tabs = [
+    'Profile',
+    'Security',
+    'Preferences',
+    'About',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +42,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Account', style: Theme.of(context).textTheme.displayMedium),
+                  Text(
+                    'Account',
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
                   const SizedBox(height: 8),
-                  Text('Manage your profile, preferences and account settings.',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.subtleBronze)),
+                  Text(
+                    'Manage your profile, preferences and account settings.',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.subtleBronze,
+                    ),
+                  ),
                   const SizedBox(height: 32),
 
                   // Tabs
@@ -68,18 +80,20 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     );
   }
 
-  Widget _buildTabContent(BuildContext context, Map<String, dynamic> user, bool isVerified) {
+  Widget _buildTabContent(
+    BuildContext context,
+    Map<String, dynamic> user,
+    bool isVerified,
+  ) {
     switch (_activeTab) {
       case 0:
-        return _ProfileTab(user: user, isVerified: isVerified, ref: ref);
+        return _ProfileTab(user: user, isVerified: isVerified);
       case 1:
         return _SecurityTab(ref: ref);
       case 2:
         return _PreferencesTab();
-      case 3:
-        return _SubscriptionTab();
       default:
-        return _AboutTab(ref: ref);
+        return const _AboutTab();
     }
   }
 }
@@ -89,7 +103,11 @@ class _AccountTab extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _AccountTab({required this.label, required this.isActive, required this.onTap});
+  const _AccountTab({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -121,94 +139,53 @@ class _AccountTab extends StatelessWidget {
 class _ProfileTab extends ConsumerWidget {
   final Map<String, dynamic> user;
   final bool isVerified;
-  final WidgetRef ref;
-
-  const _ProfileTab({required this.user, required this.isVerified, required this.ref});
+  const _ProfileTab({required this.user, required this.isVerified});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Profile information card
-            Expanded(
-              flex: 5,
-              child: _Card(
-                title: 'Profile Information',
-                child: Column(
-                  children: [
-                    _ProfileRow(label: 'Name', value: user['full_name'] ?? '—'),
-                    _ProfileRow(label: 'Email', value: '${user['email'] ?? '—'} ${isVerified ? '✓' : '(unverified)'}'),
-                    _ProfileRow(label: 'Phone', value: user['phone'] ?? '—'),
-                    _ProfileRow(label: 'Chamber', value: user['chamber'] ?? '—'),
-                    _ProfileRow(label: 'Role', value: user['role'] ?? 'advocate'),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showEditProfileDialog(context, ref),
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Edit Profile'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 24),
-            // Professional details + quick stats
-            Expanded(
-              flex: 4,
-              child: Column(
-                children: [
-                  _Card(
-                    title: 'Professional Details',
-                    child: Column(
-                      children: [
-                        _ProfileRow(label: 'Bar Council', value: user['bar_council_id']?.toString().isNotEmpty == true ? 'Registered' : '—'),
-                        _ProfileRow(label: 'Enrollment No.', value: user['bar_council_id'] ?? '—'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  _Card(
-                    title: 'Quick Stats',
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: const [
-                        _Stat(value: '—', label: 'Total Cases'),
-                        _Stat(value: '—', label: 'Drafts Created'),
-                        _Stat(value: '—', label: 'Citations Saved'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        _Card(
+          title: 'Profile',
+          child: _ProfileRow(
+            label: 'Email',
+            value:
+                '${user['email'] ?? '—'} ${isVerified ? '✓ Verified' : '(unverified)'}',
+          ),
         ),
         const SizedBox(height: 24),
-        // Account actions (mockup: Download My Data / Delete Account)
         _Card(
           title: 'Account Actions',
           child: Column(
             children: [
               ListTile(
-                leading: const Icon(Icons.download_outlined, color: AppColors.charcoal),
-                title: const Text('Download My Data'),
-                subtitle: const Text('Export your profile data as JSON'),
+                leading: const Icon(Icons.logout, color: AppColors.charcoal),
+                title: const Text('Log Out'),
+                subtitle: const Text('Sign out from this device'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => _downloadData(context, ref),
+                onTap: () async {
+                  await ref.read(authControllerProvider.notifier).logout();
+                  if (context.mounted) context.go('/login');
+                },
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: AppColors.error),
-                title: const Text('Delete Account', style: TextStyle(color: AppColors.error)),
-                subtitle: const Text('Permanently remove your account and data'),
-                trailing: const Icon(Icons.chevron_right, color: AppColors.error),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.error,
+                ),
+                title: const Text(
+                  'Delete Account',
+                  style: TextStyle(color: AppColors.error),
+                ),
+                subtitle: const Text(
+                  'Permanently remove your account and data',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.error,
+                ),
                 onTap: () => _confirmDelete(context, ref),
               ),
             ],
@@ -218,70 +195,6 @@ class _ProfileTab extends ConsumerWidget {
     );
   }
 
-  Future<void> _showEditProfileDialog(BuildContext context, WidgetRef ref) async {
-    final nameController = TextEditingController(text: user['full_name']?.toString());
-    final phoneController = TextEditingController(text: user['phone']?.toString());
-    final barController = TextEditingController(text: user['bar_council_id']?.toString());
-
-    await showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: AppColors.ivory,
-          title: const Text('Edit Profile'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Full Name')),
-              const SizedBox(height: 12),
-              TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone')),
-              const SizedBox(height: 12),
-              TextField(controller: barController, decoration: const InputDecoration(labelText: 'Bar Council ID')),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-            PrimaryButton(
-              label: 'Save',
-              onPressed: () async {
-                try {
-                  final dio = ref.read(dioProvider);
-                  await dio.patch(Endpoints.updateMe, data: {
-                    'full_name': nameController.text.trim(),
-                    'phone': phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
-                    'bar_council_id': barController.text.trim().isEmpty ? null : barController.text.trim(),
-                  });
-                  await ref.read(authControllerProvider.notifier).checkAuthStatus();
-                } catch (_) {}
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _downloadData(BuildContext context, WidgetRef ref) async {
-    try {
-      final dio = ref.read(dioProvider);
-      final me = await dio.get(Endpoints.me);
-      final raw = me.data is Map<String, dynamic> ? me.data as Map<String, dynamic> : <String, dynamic>{};
-      // In a web build this would trigger a JSON download; show a confirmation here.
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Data export ready: ${raw.toString().length} bytes of profile data.')),
-        );
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Export failed — try again.')),
-        );
-      }
-    }
-  }
-
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -289,9 +202,14 @@ class _ProfileTab extends ConsumerWidget {
         return AlertDialog(
           backgroundColor: AppColors.ivory,
           title: const Text('Delete Account?'),
-          content: const Text('This permanently removes your account, matters, drafts and saved citations. This cannot be undone.'),
+          content: const Text(
+            'This permanently removes your account, matters, drafts and saved citations. This cannot be undone.',
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               style: TextButton.styleFrom(foregroundColor: AppColors.error),
@@ -329,7 +247,12 @@ class _Card extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 18)),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontSize: 18),
+          ),
           const SizedBox(height: 16),
           child,
         ],
@@ -351,28 +274,20 @@ class _ProfileRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 140, child: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey))),
-          Expanded(child: Text(value, style: Theme.of(context).textTheme.bodyMedium)),
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          ),
         ],
       ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String value;
-  final String label;
-
-  const _Stat({required this.value, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: Theme.of(context).textTheme.displayMedium?.copyWith(color: AppColors.antiqueBrass, fontSize: 28)),
-        const SizedBox(height: 4),
-        Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.warmGrey, fontSize: 11), textAlign: TextAlign.center),
-      ],
     );
   }
 }
@@ -397,13 +312,19 @@ class _SecurityTab extends ConsumerWidget {
           TextField(
             controller: currentPassword,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'Current Password', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Current Password',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: newPassword,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'New Password',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 16),
           PrimaryButton(
@@ -411,20 +332,25 @@ class _SecurityTab extends ConsumerWidget {
             onPressed: () async {
               try {
                 final dio = ref.read(dioProvider);
-                await dio.post(Endpoints.changePassword, data: {
-                  'current_password': currentPassword.text,
-                  'new_password': newPassword.text,
-                });
+                await dio.post(
+                  Endpoints.changePassword,
+                  data: {
+                    'current_password': currentPassword.text,
+                    'new_password': newPassword.text,
+                  },
+                );
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Password changed successfully.')),
+                    const SnackBar(
+                      content: Text('Password changed successfully.'),
+                    ),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Failed: $e')));
                 }
               }
             },
@@ -443,7 +369,9 @@ class _PreferencesTab extends StatelessWidget {
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Language: English (हिन्दी / Bilingual available in the sidebar)'),
+          Text(
+            'Language: English (हिन्दी / Bilingual available in the sidebar)',
+          ),
           SizedBox(height: 12),
           Text('Theme: Editorial Light'),
         ],
@@ -452,20 +380,8 @@ class _PreferencesTab extends StatelessWidget {
   }
 }
 
-class _SubscriptionTab extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      title: 'Subscription',
-      child: const Text('Free Plan — MVP build has no billing modules (blueprint §0 Rule 2).'),
-    );
-  }
-}
-
 class _AboutTab extends StatelessWidget {
-  final WidgetRef ref;
-
-  const _AboutTab({required this.ref});
+  const _AboutTab();
 
   @override
   Widget build(BuildContext context) {
@@ -476,22 +392,12 @@ class _AboutTab extends StatelessWidget {
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('CaseSense — citation-grounded legal intelligence for Indian advocates.'),
+              Text(
+                'CaseSense — citation-grounded legal intelligence for Indian advocates.',
+              ),
               SizedBox(height: 8),
               Text('Version 2.2.0'),
             ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () async {
-              await ref.read(authControllerProvider.notifier).logout();
-              if (context.mounted) context.go('/login');
-            },
-            style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: AppColors.error)),
-            child: const Text('Log Out'),
           ),
         ),
       ],

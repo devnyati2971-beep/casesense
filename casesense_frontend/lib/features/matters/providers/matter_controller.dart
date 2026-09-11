@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/api/dio_client.dart';
@@ -50,8 +51,13 @@ class MatterController extends StateNotifier<MatterState> {
       List<Map<String, dynamic>> docs = [];
       try {
         final docsRes = await dio.get(Endpoints.matterDocuments(matterId));
-        final raw = docsRes.data is Map<String, dynamic> ? docsRes.data as Map<String, dynamic> : <String, dynamic>{};
-        final items = (raw['items'] ?? unwrapData(docsRes.data)['items']) as List<dynamic>? ?? [];
+        final raw = docsRes.data is Map<String, dynamic>
+            ? docsRes.data as Map<String, dynamic>
+            : <String, dynamic>{};
+        final items =
+            (raw['items'] ?? unwrapData(docsRes.data)['items'])
+                as List<dynamic>? ??
+            [];
         docs = items.cast<Map<String, dynamic>>();
       } catch (_) {
         // Document list is optional — don't fail the whole load.
@@ -63,14 +69,21 @@ class MatterController extends StateNotifier<MatterState> {
         documents: docs,
       );
     } on DioException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.error?.toString() ?? e.message);
+      state = state.copyWith(
+        isLoading: false,
+        error: e.error?.toString() ?? e.message,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   // 2. Upload Document (POST /matters/{id}/documents)
-  Future<bool> uploadDocument(String matterId, String filePath, String fileName) async {
+  Future<bool> uploadDocument(
+    String matterId,
+    String filePath,
+    String fileName,
+  ) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final dio = ref.read(dioProvider);
@@ -81,8 +94,12 @@ class MatterController extends StateNotifier<MatterState> {
         Endpoints.matterDocuments(matterId),
         data: form,
       );
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
-      final doc = (raw['document'] ?? unwrapData(res.data)['document']) as Map<String, dynamic>?;
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      final doc =
+          (raw['document'] ?? unwrapData(res.data)['document'])
+              as Map<String, dynamic>?;
 
       state = state.copyWith(
         isLoading: false,
@@ -95,16 +112,71 @@ class MatterController extends StateNotifier<MatterState> {
     }
   }
 
+  /// Uploads browser-picked or desktop-picked bytes. This avoids relying on a
+  /// local file path, which is unavailable in Flutter web.
+  Future<bool> uploadDocumentBytes(
+    String matterId,
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final dio = ref.read(dioProvider);
+      final form = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: fileName,
+          contentType: _contentTypeFor(fileName),
+        ),
+      });
+      final res = await dio.post(
+        Endpoints.matterDocuments(matterId),
+        data: form,
+      );
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      final doc =
+          (raw['document'] ?? unwrapData(res.data)['document'])
+              as Map<String, dynamic>?;
+      state = state.copyWith(
+        isLoading: false,
+        documents: [if (doc != null) doc, ...state.documents],
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
+    }
+  }
+
+  DioMediaType _contentTypeFor(String fileName) {
+    final extension = fileName.split('.').last.toLowerCase();
+    return switch (extension) {
+      'pdf' => DioMediaType('application', 'pdf'),
+      'docx' => DioMediaType(
+        'application',
+        'vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ),
+      'txt' => DioMediaType('text', 'plain'),
+      'jpg' || 'jpeg' => DioMediaType('image', 'jpeg'),
+      'png' => DioMediaType('image', 'png'),
+      _ => DioMediaType('application', 'octet-stream'),
+    };
+  }
+
   // 3. Delete (soft) document
-  Future<void> deleteDocument(String matterId, String docId) async {
+  Future<bool> deleteDocument(String docId) async {
     try {
       final dio = ref.read(dioProvider);
       await dio.delete('/documents/$docId');
       state = state.copyWith(
         documents: state.documents.where((d) => d['id'] != docId).toList(),
       );
-    } catch (_) {
-      // Ignore delete errors — refresh from server next load.
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+      return false;
     }
   }
 
@@ -113,7 +185,9 @@ class MatterController extends StateNotifier<MatterState> {
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get('/documents/$docId/status');
-      final raw = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : <String, dynamic>{};
+      final raw = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : <String, dynamic>{};
       final status = raw['status'] ?? unwrapData(res.data)['status'];
       state = state.copyWith(
         documents: state.documents.map((d) {
@@ -125,6 +199,10 @@ class MatterController extends StateNotifier<MatterState> {
 }
 
 // Family provider so we can pass the matterId
-final matterControllerProvider = StateNotifierProvider.family<MatterController, MatterState, String>((ref, matterId) {
-  return MatterController(ref)..loadMatter(matterId);
-});
+final matterControllerProvider =
+    StateNotifierProvider.family<MatterController, MatterState, String>((
+      ref,
+      matterId,
+    ) {
+      return MatterController(ref)..loadMatter(matterId);
+    });
