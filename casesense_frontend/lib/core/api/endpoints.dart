@@ -1,5 +1,5 @@
 class Endpoints {
-  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:8000/api/v1');
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://casesense-production.up.railway.app/api/v1');
 
   // Auth (v2.1)
   static const String login = '/auth/login';
