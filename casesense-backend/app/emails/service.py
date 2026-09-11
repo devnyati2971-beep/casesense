@@ -36,7 +36,8 @@ def _render_subject(template: str) -> str:
 def _render_body(template: str, params: dict) -> str:
     link = params.get("link", "")
     if template == "verify_email":
-        return f"Confirm your email by opening this link: {link}\n\nIf you did not create a CaseSense account, you can ignore this email."
+        code = params.get("code", "")
+        return f"Your CaseSense verification code is: {code}\n\nIt expires in 10 minutes. Do not share this code. If you did not create a CaseSense account, you can ignore this email."
     if template == "reset_password":
         return f"Reset your password using this link: {link}\n\nThis link expires in 60 minutes. If you did not request it, you can ignore this email."
     if template == "security_notice":
@@ -59,6 +60,7 @@ class EmailService:
         user_id: uuid.UUID | None = None,
         related_resource_type: str | None = None,
         related_resource_id: str | None = None,
+        background_tasks: "fastapi.BackgroundTasks | None" = None,
     ) -> None:
         """Queue an email to `email_outbox` in the caller's transaction (same txn rule §75.6)."""
         if template not in TEMPLATES:
@@ -66,17 +68,51 @@ class EmailService:
 
         from app.modules.users.models import EmailOutbox
 
-        db.add(
-            EmailOutbox(
-                user_id=user_id,
+        outbox = EmailOutbox(
+            user_id=user_id,
+            to_email=to_email,
+            template=template,
+            status="QUEUED",
+            related_resource_type=related_resource_type,
+            related_resource_id=related_resource_id,
+        )
+        db.add(outbox)
+        await db.flush()
+
+        if background_tasks:
+            background_tasks.add_task(
+                cls.dispatch_outbox,
+                outbox_id=outbox.id,
                 to_email=to_email,
                 template=template,
-                status="QUEUED",
-                related_resource_type=related_resource_type,
-                related_resource_id=related_resource_id,
+                params=params,
             )
-        )
-        await db.flush()
+
+    @classmethod
+    async def dispatch_outbox(
+        cls,
+        outbox_id,
+        to_email: str,
+        template: str,
+        params: dict | None = None,
+    ) -> None:
+        """Background task to deliver the email and update the DB status."""
+        from datetime import datetime, timezone
+        from app.db.engine import get_job_session
+        from app.modules.users.models import EmailOutbox
+
+        success = await cls.deliver(to_email, template, params)
+
+        async with get_job_session() as db:
+            outbox = await db.get(EmailOutbox, outbox_id)
+            if outbox:
+                outbox.attempts += 1
+                if success:
+                    outbox.status = "SENT"
+                    outbox.sent_at = datetime.now(timezone.utc)
+                else:
+                    outbox.status = "FAILED"
+                    outbox.last_error = "Failed to deliver via transport"
 
     @classmethod
     async def deliver(
@@ -125,13 +161,22 @@ class EmailService:
     async def _send_api(cls, to_email: str, subject: str, body: str) -> bool:
         try:
             import httpx
+            import email.utils
+
+            name, email_address = email.utils.parseaddr(settings.EMAIL_FROM)
+            if not email_address:
+                email_address = settings.EMAIL_FROM
+            
+            sender_payload = {"email": email_address}
+            if name:
+                sender_payload["name"] = name
 
             async with httpx.AsyncClient(timeout=15) as client:
                 response = await client.post(
                     settings.EMAIL_API_BASE,
                     headers={"api-key": settings.EMAIL_API_KEY},
                     json={
-                        "sender": {"email": settings.EMAIL_FROM},
+                        "sender": sender_payload,
                         "to": [{"email": to_email}],
                         "subject": subject,
                         "textContent": body,

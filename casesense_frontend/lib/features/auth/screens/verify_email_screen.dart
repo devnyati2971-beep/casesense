@@ -17,49 +17,45 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   bool _checking = false;
-  bool _processingLink = false;
+  final TextEditingController _codeController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // GoRouterState is inherited from the route, so read it after initState.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final token = GoRouterState.of(context).uri.queryParameters['token'];
-      if (token != null && token.isNotEmpty) {
-        _verifyLink(token);
-      }
-    });
   }
 
-  Future<void> _verifyLink(String token) async {
-    setState(() => _processingLink = true);
-    await ref.read(authControllerProvider.notifier).verifyEmail(token);
-    if (!mounted) return;
-    setState(() => _processingLink = false);
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
 
-    final auth = ref.read(authControllerProvider);
-    if (auth.value?.isVerified == true) {
-      context.go('/dashboard');
-    } else {
+  Future<void> _verifyCode() async {
+    final code = _codeController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error?.toString() ?? 'This verification link is invalid or has expired.')),
+        const SnackBar(
+          content: Text('Enter the six-digit code from your email.'),
+        ),
       );
+      return;
     }
-  }
-
-  Future<void> _checkVerified() async {
     setState(() => _checking = true);
-    await ref.read(authControllerProvider.notifier).checkAuthStatus();
-    final auth = ref.read(authControllerProvider);
+    await ref.read(authControllerProvider.notifier).verifyEmail(code);
     if (!mounted) return;
     setState(() => _checking = false);
 
+    final auth = ref.read(authControllerProvider);
     if (auth.value?.isVerified == true) {
       context.go('/dashboard');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Still unverified. Please click the link in your email first.')),
+        SnackBar(
+          content: Text(
+            auth.error?.toString() ??
+                'That verification code is invalid or expired.',
+          ),
+        ),
       );
     }
   }
@@ -69,7 +65,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     final email = user?['email']?.toString();
     if (email == null || email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not determine your email address.')),
+        const SnackBar(
+          content: Text('Could not determine your email address.'),
+        ),
       );
       return;
     }
@@ -85,9 +83,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       final code = (e as dynamic).response?.statusCode;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(code == 429
-              ? 'Please wait a minute before requesting another email.'
-              : 'Could not resend right now — try again shortly.'),
+          content: Text(
+            code == 429
+                ? 'Please wait a minute before requesting another email.'
+                : 'Could not resend right now — try again shortly.',
+          ),
         ),
       );
     }
@@ -102,15 +102,31 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('CaseSense', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.antiqueBrass, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
+        Text(
+          'CaseSense',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: AppColors.antiqueBrass,
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(height: 32),
-        const Icon(Icons.mark_email_read_outlined, size: 56, color: AppColors.antiqueBrass),
+        const Icon(
+          Icons.mark_email_read_outlined,
+          size: 56,
+          color: AppColors.antiqueBrass,
+        ),
         const SizedBox(height: 24),
-        Text('Verify your email', style: Theme.of(context).textTheme.displayMedium),
+        Text(
+          'Verify your email',
+          style: Theme.of(context).textTheme.displayMedium,
+        ),
         const SizedBox(height: 16),
         Text(
-          'We sent a verification link to $email. Please click the link to secure your CaseSense account.',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
+          'We sent a six-digit verification code to $email.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: AppColors.warmGrey),
         ),
         const SizedBox(height: 16),
         Row(
@@ -119,8 +135,10 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'For security, emails can be resent once per minute.',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.subtleBronze),
+                'Codes expire after 10 minutes. Emails can be resent once per minute.',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: AppColors.subtleBronze),
               ),
             ),
           ],
@@ -128,11 +146,40 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
         const SizedBox(height: 32),
         SizedBox(
           width: double.infinity,
-          child: (_checking || _processingLink)
-              ? const Center(child: CircularProgressIndicator(color: AppColors.antiqueBrass))
-              : PrimaryButton(
-                  label: 'I have verified my email',
-                  onPressed: _checkVerified,
+          child: _checking
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.antiqueBrass,
+                  ),
+                )
+              : Column(
+                  children: [
+                    TextField(
+                      controller: _codeController,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineMedium?.copyWith(letterSpacing: 10),
+                      decoration: const InputDecoration(
+                        labelText: 'Verification code',
+                        hintText: '000000',
+                        counterText: '',
+                        border: OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => _verifyCode(),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: PrimaryButton(
+                        label: 'Verify email',
+                        onPressed: _verifyCode,
+                      ),
+                    ),
+                  ],
                 ),
         ),
         const SizedBox(height: 12),

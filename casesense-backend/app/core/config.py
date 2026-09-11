@@ -103,11 +103,12 @@ class Settings(BaseSettings):
 
     # ── Email (v2.1 §75.6) ────────────────────────────────────────────────────
     EMAIL_TRANSPORT: Literal["console", "smtp", "api_generic"] = "console"
-    SMTP_URL: str = ""
-    EMAIL_API_KEY: str = ""
+    SMTP_URL: str | None = None
+    EMAIL_API_KEY: str | None = None
     EMAIL_API_BASE: str = "https://api.brevo.com/v3/smtp/email"
     EMAIL_FROM: str = "CaseSense <no-reply@casesense.local>"
     VERIFICATION_TOKEN_TTL_HOURS: int = 24
+    EMAIL_VERIFICATION_OTP_TTL_MINUTES: int = 10
     RESET_TOKEN_TTL_MINUTES: int = 60
 
     # ── Auth / OAuth (v2.1) ───────────────────────────────────────────────────

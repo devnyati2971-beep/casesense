@@ -34,6 +34,7 @@ from app.modules.users.repository import UserRepository
 from app.modules.users.schemas import TokenPair, UserRegisterRequest
 
 _AUTH_TOKEN_TTL = timedelta(hours=settings.VERIFICATION_TOKEN_TTL_HOURS)
+_EMAIL_OTP_TTL = timedelta(minutes=settings.EMAIL_VERIFICATION_OTP_TTL_MINUTES)
 _RESET_TOKEN_TTL = timedelta(minutes=settings.RESET_TOKEN_TTL_MINUTES)
 
 
@@ -47,8 +48,9 @@ def _validate_password_strength(password: str) -> None:
 
 
 class UserService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, background_tasks: "fastapi.BackgroundTasks | None" = None) -> None:
         self.session = session
+        self.background_tasks = background_tasks
         self.repo = UserRepository(session)
 
     # ── Registration / login ───────────────────────────────────────────────────
@@ -92,6 +94,15 @@ class UserService:
             raise InvalidCredentialsError()
 
         verify_password(password, user.password_hash)
+
+        if not user.is_verified:
+            await self._queue_verification(user, ip_address)
+            await self.session.commit()
+            raise ValidationError(
+                "Email not verified. A new verification email has been sent.", 
+                code="EMAIL_NOT_VERIFIED",
+                background_tasks=self.background_tasks
+            )
 
         if password_needs_rehash(user.password_hash):
             new_hash = hash_password(password)
@@ -157,25 +168,28 @@ class UserService:
 
     async def _queue_verification(self, user: User, ip_address: str | None) -> None:
         await self.repo.invalidate_auth_tokens(user.id, "EMAIL_VERIFICATION")
-        raw_token = secrets.token_urlsafe(32)
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        # Scope the stored hash to the user so identical six-digit codes can
+        # safely exist for different accounts despite the global unique hash.
+        stored_token = f"{user.id}:{code}"
         await self.repo.store_auth_token(
-            user.id, "EMAIL_VERIFICATION", raw_token,
-            expires_at=datetime.now(tz=timezone.utc) + _AUTH_TOKEN_TTL,
+            user.id, "EMAIL_VERIFICATION", stored_token,
+            expires_at=datetime.now(tz=timezone.utc) + _EMAIL_OTP_TTL,
             requested_ip=ip_address,
         )
-        link = f"{settings.FRONTEND_BASE_URL}/verify-email?token={raw_token}"
         await EmailService.send(
             db=self.session,
             to_email=user.email,
             template="verify_email",
-            params={"link": link},
+            params={"code": code},
             user_id=user.id,
             related_resource_type="USER",
             related_resource_id=str(user.id),
+            background_tasks=self.background_tasks,
         )
 
-    async def verify_email(self, raw_token: str) -> bool:
-        token = await self.repo.get_auth_token("EMAIL_VERIFICATION", raw_token)
+    async def verify_email(self, user_id: uuid.UUID, code: str) -> bool:
+        token = await self.repo.get_auth_token("EMAIL_VERIFICATION", f"{user_id}:{code}")
         now = datetime.now(tz=timezone.utc)
         if token is None or token.used_at is not None:
             raise ValidationError("INVALID_TOKEN", code="INVALID_TOKEN")
@@ -183,7 +197,7 @@ class UserService:
             raise ValidationError("INVALID_TOKEN", code="INVALID_TOKEN")
 
         await self.repo.mark_auth_token_used(token.id)
-        await self.repo.set_email_verified(token.user_id)
+        await self.repo.set_email_verified(user_id)
         await self.session.commit()
         return True
 
@@ -204,7 +218,8 @@ class UserService:
         if user.password_hash is None:
             # OAuth-only account: security notice, no reset token.
             await EmailService.send(
-                db=self.session, to_email=user.email, template="security_notice", user_id=user.id
+                db=self.session, to_email=user.email, template="security_notice", user_id=user.id,
+                background_tasks=self.background_tasks,
             )
             await self.session.commit()
             return
@@ -219,6 +234,7 @@ class UserService:
         await EmailService.send(
             db=self.session, to_email=user.email, template="reset_password",
             params={"link": link}, user_id=user.id,
+            background_tasks=self.background_tasks,
         )
         await self.session.commit()
 
@@ -235,7 +251,8 @@ class UserService:
                 user = await self.repo.get_by_id(token.user_id)
                 if user:
                     await EmailService.send(
-                        db=self.session, to_email=user.email, template="security_notice", user_id=user.id
+                        db=self.session, to_email=user.email, template="security_notice", user_id=user.id,
+                        background_tasks=self.background_tasks,
                     )
                     await self.session.commit()
             raise ValidationError("INVALID_TOKEN", code="INVALID_TOKEN")
@@ -249,6 +266,7 @@ class UserService:
             to_email=(await self.repo.get_by_id(token.user_id)).email,
             template="security_notice",
             user_id=token.user_id,
+            background_tasks=self.background_tasks,
         )
         await self.session.commit()
 
@@ -284,7 +302,8 @@ class UserService:
         tokens = await self._issue_tokens(user, user_agent, ip_address, family_id=new_family)
 
         await EmailService.send(
-            db=self.session, to_email=user.email, template="password_changed", user_id=user.id
+            db=self.session, to_email=user.email, template="password_changed", user_id=user.id,
+            background_tasks=self.background_tasks,
         )
         await self.session.commit()
         return user, tokens

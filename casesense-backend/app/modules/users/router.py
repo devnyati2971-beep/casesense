@@ -5,10 +5,11 @@ Blueprint §11, §14, §75.1 (rate limits), §14.6/§73 (OAuth).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status, Response
+from fastapi import APIRouter, Request, status, Response, BackgroundTasks
 
 from app.common.dependencies import CurrentUserId, DbSession
 from app.common.rate_limit_deps import RateLimitDep
+from app.common.rate_limit import check_rate_limit
 from app.common.schemas import SuccessResponse
 from app.core.exceptions import ValidationException
 from app.modules.users.schemas import (
@@ -115,9 +116,10 @@ async def register(
     body: UserRegisterRequest,
     request: Request,
     db: DbSession,
-    _rl: None = RateLimitDep("auth_register"),
+    background_tasks: BackgroundTasks,
 ) -> SuccessResponse[dict]:
-    svc = UserService(db)
+    await check_rate_limit("auth_register", f"email:{body.email}")
+    svc = UserService(db, background_tasks=background_tasks)
     user, tokens = await svc.register(body, _ua(request), _ip(request))
     return SuccessResponse(
         data={
@@ -133,9 +135,10 @@ async def login(
     body: UserLoginRequest,
     request: Request,
     db: DbSession,
+    background_tasks: BackgroundTasks,
     _rl: None = RateLimitDep("auth_login"),
 ) -> SuccessResponse[dict]:
-    svc = UserService(db)
+    svc = UserService(db, background_tasks=background_tasks)
     user, tokens = await svc.login(body.email, body.password, _ua(request), _ip(request))
     return SuccessResponse(
         data={
@@ -176,9 +179,14 @@ async def get_me(
 
 
 @auth_router.post("/verify-email", response_model=SuccessResponse[dict])
-async def verify_email(body: VerifyEmailRequest, db: DbSession) -> SuccessResponse[dict]:
+async def verify_email(
+    body: VerifyEmailRequest,
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    _rl: None = RateLimitDep("auth_verify_email", keyed_by_user=True),
+) -> SuccessResponse[dict]:
     svc = UserService(db)
-    await svc.verify_email(body.token)
+    await svc.verify_email(current_user_id, body.code)
     return SuccessResponse(data={"email_verified": True}, message="Email verified.")
 
 
@@ -191,10 +199,11 @@ async def verify_email(body: VerifyEmailRequest, db: DbSession) -> SuccessRespon
 async def resend_verification(
     body: EmailRequest,
     db: DbSession,
+    background_tasks: BackgroundTasks,
     _rl: None = RateLimitDep("auth_resend_verification"),
 ) -> None:
     """OTP/verification mail — 1 per minute per IP+email (§75.1, email exhaustion guard)."""
-    svc = UserService(db)
+    svc = UserService(db, background_tasks=background_tasks)
     await svc.resend_verification(body.email)
 
 
@@ -207,16 +216,17 @@ async def resend_verification(
 async def forgot_password(
     body: EmailRequest,
     db: DbSession,
+    background_tasks: BackgroundTasks,
     _rl: None = RateLimitDep("auth_forgot_password"),
 ) -> None:
     """Reset/OTP mail — 1 per minute per IP+email (§75.1, email exhaustion guard)."""
-    svc = UserService(db)
+    svc = UserService(db, background_tasks=background_tasks)
     await svc.forgot_password(body.email)
 
 
 @auth_router.post("/reset-password", response_model=SuccessResponse[dict])
-async def reset_password(body: ResetPasswordRequest, db: DbSession) -> SuccessResponse[dict]:
-    svc = UserService(db)
+async def reset_password(body: ResetPasswordRequest, db: DbSession, background_tasks: BackgroundTasks) -> SuccessResponse[dict]:
+    svc = UserService(db, background_tasks=background_tasks)
     await svc.reset_password(body.token, body.new_password)
     return SuccessResponse(data={"success": True}, message="Password reset.")
 
@@ -227,8 +237,9 @@ async def change_password(
     request: Request,
     current_user_id: CurrentUserId,
     db: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> SuccessResponse[dict]:
-    svc = UserService(db)
+    svc = UserService(db, background_tasks=background_tasks)
     user, tokens = await svc.change_password(
         current_user_id,
         current_password=body.current_password,

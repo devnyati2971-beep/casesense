@@ -47,7 +47,9 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     final storage = ref.read(secureStorageProvider);
     final token = await storage.getAccessToken();
     if (token == null) {
-      state = AsyncValue.data(AuthState(isAuthenticated: false, isVerified: false));
+      state = AsyncValue.data(
+        AuthState(isAuthenticated: false, isVerified: false),
+      );
       return;
     }
     try {
@@ -55,15 +57,19 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
       final dio = ref.read(dioProvider);
       final res = await dio.get(Endpoints.me);
       final user = unwrapData(res.data);
-      state = AsyncValue.data(AuthState(
-        isAuthenticated: true,
-        isVerified: user['is_verified'] == true,
-        user: user,
-      ));
+      state = AsyncValue.data(
+        AuthState(
+          isAuthenticated: true,
+          isVerified: user['is_verified'] == true,
+          user: user,
+        ),
+      );
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         await storage.clearTokens();
-        state = AsyncValue.data(AuthState(isAuthenticated: false, isVerified: false));
+        state = AsyncValue.data(
+          AuthState(isAuthenticated: false, isVerified: false),
+        );
       } else {
         state = AsyncValue.error(_extractErrorMessage(e), StackTrace.current);
       }
@@ -76,19 +82,26 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     state = const AsyncValue.loading();
     try {
       final dio = ref.read(dioProvider);
-      final res = await dio.post(Endpoints.login, data: {'email': email, 'password': password});
+      final res = await dio.post(
+        Endpoints.login,
+        data: {'email': email, 'password': password},
+      );
       final data = unwrapData(res.data);
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
       final user = (data['user'] as Map<String, dynamic>?) ?? {};
-      await ref.read(secureStorageProvider).saveTokens(
-        tokens['access_token'] ?? '',
-        tokens['refresh_token'] ?? '',
+      await ref
+          .read(secureStorageProvider)
+          .saveTokens(
+            tokens['access_token'] ?? '',
+            tokens['refresh_token'] ?? '',
+          );
+      state = AsyncValue.data(
+        AuthState(
+          isAuthenticated: true,
+          isVerified: user['is_verified'] == true,
+          user: user,
+        ),
       );
-      state = AsyncValue.data(AuthState(
-        isAuthenticated: true,
-        isVerified: user['is_verified'] == true,
-        user: user,
-      ));
     } catch (e, st) {
       state = AsyncValue.error(_extractErrorMessage(e), st);
     }
@@ -104,25 +117,32 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     state = const AsyncValue.loading();
     try {
       final dio = ref.read(dioProvider);
-      final res = await dio.post(Endpoints.register, data: {
-        'full_name': fullName,
-        'email': email,
-        'password': password,
-        if (barCouncilId != null) 'bar_council_id': barCouncilId,
-        if (phone != null) 'phone': phone,
-      });
+      final res = await dio.post(
+        Endpoints.register,
+        data: {
+          'full_name': fullName,
+          'email': email,
+          'password': password,
+          if (barCouncilId != null) 'bar_council_id': barCouncilId,
+          if (phone != null) 'phone': phone,
+        },
+      );
       final data = unwrapData(res.data);
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
       final user = (data['user'] as Map<String, dynamic>?) ?? {};
-      await ref.read(secureStorageProvider).saveTokens(
-        tokens['access_token'] ?? '',
-        tokens['refresh_token'] ?? '',
+      await ref
+          .read(secureStorageProvider)
+          .saveTokens(
+            tokens['access_token'] ?? '',
+            tokens['refresh_token'] ?? '',
+          );
+      state = AsyncValue.data(
+        AuthState(
+          isAuthenticated: true,
+          isVerified: user['is_verified'] == true,
+          user: user,
+        ),
       );
-      state = AsyncValue.data(AuthState(
-        isAuthenticated: true,
-        isVerified: user['is_verified'] == true,
-        user: user,
-      ));
       return true;
     } catch (e, st) {
       state = AsyncValue.error(_extractErrorMessage(e), st);
@@ -133,7 +153,9 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
   Future<void> logout() async {
     try {
       final dio = ref.read(dioProvider);
-      final refreshToken = await ref.read(secureStorageProvider).getRefreshToken();
+      final refreshToken = await ref
+          .read(secureStorageProvider)
+          .getRefreshToken();
       if (refreshToken != null) {
         await dio.post(Endpoints.logout, data: {'refresh_token': refreshToken});
       }
@@ -141,29 +163,35 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
       // Ignore network errors on logout — always clear local state.
     }
     await ref.read(secureStorageProvider).clearTokens();
-    state = AsyncValue.data(AuthState(isAuthenticated: false, isVerified: false));
+    state = AsyncValue.data(
+      AuthState(isAuthenticated: false, isVerified: false),
+    );
   }
 
   Future<bool> oauthLogin(String code, String stateParam) async {
     state = const AsyncValue.loading();
     try {
       final dio = ref.read(dioProvider);
-      final res = await dio.post('/auth/oauth/callback', data: {
-        'code': code,
-        'state': stateParam,
-      });
+      final res = await dio.post(
+        '/auth/oauth/callback',
+        data: {'code': code, 'state': stateParam},
+      );
       final data = unwrapData(res.data);
       final tokens = (data['tokens'] as Map<String, dynamic>?) ?? {};
       final user = (data['user'] as Map<String, dynamic>?) ?? {};
-      await ref.read(secureStorageProvider).saveTokens(
-        tokens['access_token'] ?? '',
-        tokens['refresh_token'] ?? '',
+      await ref
+          .read(secureStorageProvider)
+          .saveTokens(
+            tokens['access_token'] ?? '',
+            tokens['refresh_token'] ?? '',
+          );
+      state = AsyncValue.data(
+        AuthState(
+          isAuthenticated: true,
+          isVerified: user['is_verified'] == true,
+          user: user,
+        ),
       );
-      state = AsyncValue.data(AuthState(
-        isAuthenticated: true,
-        isVerified: user['is_verified'] == true,
-        user: user,
-      ));
       return true;
     } catch (e, st) {
       state = AsyncValue.error(_extractErrorMessage(e), st);
@@ -171,7 +199,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     }
   }
 
-  Future<void> verifyEmail(String token) async {
+  Future<void> verifyEmail(String code) async {
     // Keep the logged-in user while the verification request is in flight.
     // Reading state after setting loading always produced null and discarded
     // the profile from the sidebar.
@@ -179,18 +207,21 @@ class AuthController extends StateNotifier<AsyncValue<AuthState>> {
     state = const AsyncValue.loading();
     try {
       final dio = ref.read(dioProvider);
-      await dio.post(Endpoints.verifyEmail, data: {'token': token});
-      state = AsyncValue.data(AuthState(
-        isAuthenticated: current?.isAuthenticated ?? true,
-        isVerified: true,
-        user: current?.user,
-      ));
+      await dio.post(Endpoints.verifyEmail, data: {'code': code});
+      state = AsyncValue.data(
+        AuthState(
+          isAuthenticated: current?.isAuthenticated ?? true,
+          isVerified: true,
+          user: current?.user,
+        ),
+      );
     } catch (e, st) {
       state = AsyncValue.error(_extractErrorMessage(e), st);
     }
   }
 }
 
-final authControllerProvider = StateNotifierProvider<AuthController, AsyncValue<AuthState>>((ref) {
-  return AuthController(ref);
-});
+final authControllerProvider =
+    StateNotifierProvider<AuthController, AsyncValue<AuthState>>((ref) {
+      return AuthController(ref);
+    });

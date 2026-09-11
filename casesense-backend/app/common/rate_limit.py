@@ -38,6 +38,7 @@ RATE_LIMITS: dict[str, tuple[int, int]] = {
     "auth_register": (5, 3600),          # 5 registrations / hour / IP
     "auth_login": (10, 300),             # 10 login attempts / 5 min / IP
     "auth_resend_verification": (1, 60),  # 1 OTP mail / minute (email exhaustion guard)
+    "auth_verify_email": (10, 600),       # 10 OTP attempts / 10 min per account
     "auth_forgot_password": (1, 60),      # 1 reset mail / minute (email exhaustion guard)
     "auth_oauth_callback": (10, 300),
     "ai_translate": (10, 60),            # 10 AI calls / minute / user (token guard)

@@ -71,7 +71,7 @@ class LogoutRequest(BaseModel):
 # ── v2.1 auth lifecycle ────────────────────────────────────────────────────────
 
 class VerifyEmailRequest(BaseModel):
-    token: str
+    code: str = Field(..., pattern=r"^\d{6}$")
 
 
 class EmailRequest(BaseModel):

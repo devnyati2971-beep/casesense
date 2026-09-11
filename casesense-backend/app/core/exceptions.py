@@ -18,11 +18,13 @@ class CaseSenseError(Exception):
         self, 
         message: str | None = None, 
         details: dict[str, Any] | None = None,
-        code: str | None = None
+        code: str | None = None,
+        background_tasks: Any | None = None
     ) -> None:
         self.message = message or self.__class__.message
         self.details = details or {}
         self.code = code or self.__class__.code
+        self.background_tasks = background_tasks
         super().__init__(self.message)
 
 

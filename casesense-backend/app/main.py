@@ -102,11 +102,14 @@ def create_app() -> FastAPI:
                 message=exc.message,
                 path=request.url.path,
             )
-        return JSONResponse(
+        response = JSONResponse(
             status_code=exc.status_code,
             content=_error_envelope(exc, trace_id),
             headers={"X-Request-ID": trace_id} if trace_id else None,
         )
+        if getattr(exc, "background_tasks", None):
+            response.background = exc.background_tasks
+        return response
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception) -> JSONResponse:
